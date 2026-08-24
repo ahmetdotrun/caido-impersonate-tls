@@ -1,0 +1,39 @@
+{
+  "name": "caido-impersonate-tls",
+  "version": "0.1.5",
+  "private": true,
+  "author": {
+    "name": "A. Eren Kilic",
+    "email": "aerenkilic@pm.me",
+    "url": "https://github.com/ahmetdotrun"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ahmetdotrun/caido-impersonate-tls.git"
+  },
+  "packageManager": "pnpm@11.23.0",
+  "browserslist": [
+    "Chrome >= 120",
+    "Firefox >= 120"
+  ],
+  "scripts": {
+    "build": "caido-dev build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint ./packages/**/src --max-warnings 0",
+    "lint:fix": "eslint ./packages/**/src --fix --max-warnings 0",
+    "knip": "knip"
+  },
+  "devDependencies": {
+    "@caido-community/dev": "0.1.7",
+    "@caido/eslint-config": "0.10.0",
+    "@caido/tailwindcss": "0.1.0",
+    "@vitejs/plugin-vue": "5.2.1",
+    "eslint": "9.39.5",
+    "knip": "6.32.2",
+    "postcss-prefixwrap": "1.58.0",
+    "prettier": "3.9.6",
+    "tailwindcss": "3.4.13",
+    "tailwindcss-primeui": "0.6.1",
+    "typescript": "5.9.3"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "shared",
+  "version": "0.1.5",
+  "private": true,
+  "type": "module",
+  "types": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@caido/sdk-shared": "0.2.2"
+  }
+}

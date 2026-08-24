@@ -1,0 +1,11 @@
+packages:
+  - "packages/*"
+
+overrides:
+  "@caido-community/dev>glob": "12.0.0"
+  "@caido-community/dev>sharp": "0.35.3"
+  "@caido-community/dev>vite": "6.4.3"
+  "@caido-community/dev>ws": "8.21.3"
+  "cookie": "0.7.2"
+  "esbuild": "0.25.0"
+  "qs": "6.15.3"

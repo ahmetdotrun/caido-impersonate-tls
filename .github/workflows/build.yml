@@ -1,0 +1,46 @@
+name: Build plugin
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Verify and package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Build and verify plugin
+        run: docker build --target artifact --output type=local,dest=dist --progress=plain .
+
+      - name: Verify package and create checksum
+        working-directory: dist
+        run: |
+          test -s plugin_package.zip
+          unzip -t plugin_package.zip
+          sha256sum plugin_package.zip > plugin_package.zip.sha256
+
+      - name: Upload plugin package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: plugin-package
+          path: |
+            dist/plugin_package.zip
+            dist/plugin_package.zip.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

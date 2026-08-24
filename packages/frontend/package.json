@@ -1,0 +1,19 @@
+{
+  "name": "frontend",
+  "version": "0.1.5",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@caido/primevue": "0.3.3",
+    "primevue": "4.1.0",
+    "shared": "workspace:*",
+    "vue": "3.5.41"
+  },
+  "devDependencies": {
+    "@caido/sdk-frontend": "0.58.2",
+    "vue-tsc": "3.3.11"
+  }
+}
