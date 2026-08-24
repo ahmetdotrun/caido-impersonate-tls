@@ -30,7 +30,7 @@ This design does not create a Caido HTTP/SOCKS proxy, expose a general proxy end
 
 ## Install and use
 
-1. Download `plugin_package.zip` from a release or the `plugin-package` artifact of a successful GitHub Actions build.
+1. Download `plugin_package.zip` from the latest release.
 2. Install the ZIP from Caido's Plugins page.
 3. Open **Impersonate TLS** and confirm that the transport is running.
 4. In **Settings → Upstream Plugins**, add a rule for this plugin. Use `*` to include every domain or a narrower domain pattern for selective routing.
@@ -38,10 +38,6 @@ This design does not create a Caido HTTP/SOCKS proxy, expose a general proxy end
 6. Check the **Activity** tab for routing state, profile, response status, protocol, duration, or transport errors.
 
 Activity is memory-only and limited to 250 entries. Paths, queries, headers, bodies, cookies, and internal tokens are never logged.
-
-## Builds
-
-GitHub Actions runs the Go tests, helper smoke test, type checks, lint, unused-code analysis, and production package build on every push and pull request. Successful runs publish `plugin_package.zip` and its SHA-256 checksum as the `plugin-package` workflow artifact.
 
 ## Current scope
 
@@ -60,7 +56,6 @@ GitHub Actions runs the Go tests, helper smoke test, type checks, lint, unused-c
 - Profile versions follow the pinned transport library and may trail current browser release channels.
 - The plugin preserves supplied HTTP headers; it does not rewrite the User-Agent or generate a browser-coherent header set, so headers must remain aligned with the selected profile.
 - HTTP/3/QUIC, WebSockets, and custom ClientHello or JA3/JA4_r import are not implemented.
-- TLS impersonation cannot solve JavaScript challenges, behavioural telemetry, CAPTCHA, proof-of-work, browser attestation, or cookie-bound challenges.
 
 Use this plugin only on systems you are authorized to test.
 

@@ -11,7 +11,7 @@ import type { BackendSDK } from "./types";
 const START_TIMEOUT_MS = 10_000;
 const STOP_TIMEOUT_MS = 5_000;
 const HEARTBEAT_INTERVAL_MS = 5_000;
-const TRANSPORT_VERSION = "0.1.4";
+const TRANSPORT_VERSION = "0.1.0";
 const BINARY_NAME = "caido-impersonate-transport";
 
 type ReadyEvent = {
