@@ -45,6 +45,7 @@ export type ActivityEntry = {
   protocol?: string;
   durationMs?: number;
   error?: string;
+  warning?: string;
 };
 
 export type API = {

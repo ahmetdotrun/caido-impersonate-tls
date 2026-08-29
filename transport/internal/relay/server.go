@@ -23,6 +23,7 @@ type requestEvent struct {
 	Protocol   string `json:"protocol,omitempty"`
 	DurationMS int64  `json:"durationMs"`
 	Error      string `json:"error,omitempty"`
+	Warning    string `json:"warning,omitempty"`
 }
 
 type Server struct {
@@ -96,6 +97,7 @@ func (server *Server) handle(connection net.Conn) {
 		writeError(connection, http.StatusBadRequest, err.Error())
 		return
 	}
+	warning := profileCoherenceWarning(metadata.Profile, request.firstHeader("User-Agent"))
 
 	startedAt := time.Now()
 	response, err := forward(server.clients, request, metadata)
@@ -107,6 +109,7 @@ func (server *Server) handle(connection net.Conn) {
 			Outcome:    "failed",
 			DurationMS: time.Since(startedAt).Milliseconds(),
 			Error:      truncateActivityError(err.Error()),
+			Warning:    warning,
 		})
 		writeError(connection, http.StatusBadGateway, err.Error())
 		return
@@ -120,6 +123,7 @@ func (server *Server) handle(connection net.Conn) {
 			Outcome:    "failed",
 			DurationMS: time.Since(startedAt).Milliseconds(),
 			Error:      truncateActivityError("write response: " + err.Error()),
+			Warning:    warning,
 		})
 		return
 	}
@@ -131,6 +135,7 @@ func (server *Server) handle(connection net.Conn) {
 		StatusCode: response.StatusCode,
 		Protocol:   response.Proto,
 		DurationMS: time.Since(startedAt).Milliseconds(),
+		Warning:    warning,
 	})
 }
 

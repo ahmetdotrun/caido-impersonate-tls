@@ -26,9 +26,12 @@ func (pool *clientPool) get(profileName string) (tls_client.HttpClient, error) {
 		return client, nil
 	}
 
-	profile, found := profiles.MappedTLSClients[profileName]
+	profile, found := customTransportProfiles[profileName]
 	if !found {
-		return nil, fmt.Errorf("unknown transport profile %q", profileName)
+		profile, found = profiles.MappedTLSClients[profileName]
+		if !found {
+			return nil, fmt.Errorf("unknown transport profile %q", profileName)
+		}
 	}
 
 	options := []tls_client.HttpClientOption{

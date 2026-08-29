@@ -120,7 +120,15 @@ func TestServerRelaysAuthenticatedHTTP(t *testing.T) {
 	}
 	defer connection.Close()
 
-	if _, err := io.WriteString(connection, privateRequest(token, host, port, "/probe")); err != nil {
+	request := privateRequestForScheme(
+		token,
+		"http",
+		host,
+		port,
+		"/probe",
+		"Mozilla/5.0 Chrome/146.0.0.0 Safari/537.36",
+	)
+	if _, err := io.WriteString(connection, request); err != nil {
 		t.Fatalf("write request: %v", err)
 	}
 	response, err := http.ReadResponse(bufio.NewReader(connection), nil)
@@ -148,8 +156,12 @@ func TestServerRelaysAuthenticatedHTTP(t *testing.T) {
 		if event.ID != "test-1" || event.Outcome != "succeeded" {
 			t.Fatalf("unexpected activity event: %#v", event)
 		}
-		if event.StatusCode != http.StatusOK || event.Protocol == "" {
+		if event.StatusCode != http.StatusOK || event.Protocol != "HTTP/1.1" {
 			t.Fatalf("missing response evidence: %#v", event)
+		}
+		wantWarning := "User-Agent reports Chrome 146 but the selected transport profile is Chrome 152"
+		if event.Warning != wantWarning {
+			t.Fatalf("warning = %q, want %q", event.Warning, wantWarning)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("activity event was not emitted")
@@ -176,7 +188,7 @@ func TestServerKeepsCertificateVerificationEnabled(t *testing.T) {
 	server := NewServer(token, log.New(io.Discard, "", 0))
 	go server.handle(serverSide)
 
-	request := privateRequestForScheme(token, "https", host, port, "/")
+	request := privateRequestForScheme(token, "https", host, port, "/", "")
 	if _, err := io.WriteString(clientSide, request); err != nil {
 		t.Fatalf("write request: %v", err)
 	}
@@ -191,10 +203,10 @@ func TestServerKeepsCertificateVerificationEnabled(t *testing.T) {
 }
 
 func privateRequest(token, host, port, path string) string {
-	return privateRequestForScheme(token, "http", host, port, path)
+	return privateRequestForScheme(token, "http", host, port, path, "")
 }
 
-func privateRequestForScheme(token, scheme, host, port, path string) string {
+func privateRequestForScheme(token, scheme, host, port, path, userAgent string) string {
 	lines := []string{
 		fmt.Sprintf("GET %s HTTP/1.1", path),
 		fmt.Sprintf("Host: %s:%s", host, port),
@@ -202,12 +214,17 @@ func privateRequestForScheme(token, scheme, host, port, path string) string {
 		fmt.Sprintf("%s: %s", headerScheme, scheme),
 		fmt.Sprintf("%s: %s", headerHost, host),
 		fmt.Sprintf("%s: %s", headerPort, port),
-		fmt.Sprintf("%s: chrome_146", headerProfile),
+		fmt.Sprintf("%s: chrome_152", headerProfile),
 		fmt.Sprintf("%s: test-1", headerTrace),
+	}
+	if userAgent != "" {
+		lines = append(lines, fmt.Sprintf("User-Agent: %s", userAgent))
+	}
+	lines = append(lines,
 		"Connection: close",
 		"",
 		"",
-	}
+	)
 	return strings.Join(lines, "\r\n")
 }
 

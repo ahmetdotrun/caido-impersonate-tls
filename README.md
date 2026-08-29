@@ -35,13 +35,13 @@ This design does not create a Caido HTTP/SOCKS proxy, expose a general proxy end
 3. Open **Impersonate TLS** and confirm that the transport is running.
 4. In **Settings → Upstream Plugins**, add a rule for this plugin. Use `*` to include every domain or a narrower domain pattern for selective routing.
 5. Send requests normally from Proxy, Replay, Automate, or workflows.
-6. Check the **Activity** tab for routing state, profile, response status, protocol, duration, or transport errors.
+6. Check the **Activity** tab for routing state, profile, response status, protocol, duration, transport errors, and Chrome identity mismatches.
 
 Activity is memory-only and limited to 250 entries. Paths, queries, headers, bodies, cookies, and internal tokens are never logged.
 
 ## Current scope
 
-- Pinned `tls-client` v1.15.1 profiles for Chrome 146/144, Firefox 148/147, Safari iOS 26.0/18.5, and OkHttp 4.10 on Android 13.
+- A local Chrome 152 profile plus pinned `tls-client` v1.15.1 profiles for Chrome 146/144, Firefox 148/147, Safari iOS 26.0/18.5, and OkHttp 4.10 on Android 13.
 - HTTPS negotiates HTTP/2 or HTTP/1.1 through ALPN; plain HTTP uses HTTP/1.1.
 - Chrome profiles permute ClientHello extension order on each new handshake, matching modern Chromium behaviour while keeping their JA4 and HTTP/2 identity stable.
 - Certificate verification and fail-closed transport behavior.
@@ -53,7 +53,7 @@ Activity is memory-only and limited to 250 entries. Paths, queries, headers, bod
 
 - Request bodies are buffered with a 64 MiB limit.
 - Each Caido-to-plugin connection handles one request.
-- Profile versions follow the pinned transport library and may trail current browser release channels.
+- Browser profiles are captured snapshots and may trail current release channels.
 - The plugin preserves supplied HTTP headers; it does not rewrite the User-Agent or generate a browser-coherent header set, so headers must remain aligned with the selected profile.
 - HTTP/3/QUIC, WebSockets, and custom ClientHello or JA3/JA4_r import are not implemented.
 
@@ -61,6 +61,6 @@ Use this plugin only on systems you are authorized to test.
 
 ## Credits and license
 
-The design was informed by TLSMask, PortSwigger's bypass-bot-detection, and WafRift.
+The design was informed by TLSMask, PortSwigger's bypass-bot-detection, WafRift, and tls-client's Chrome 152 profile proposal.
 
 The project is MIT licensed. Transport build metadata and the license texts supplied by linked dependencies are bundled under `assets/licenses/`; dependency authors retain their respective rights.

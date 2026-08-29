@@ -1,6 +1,7 @@
 import type { Profile } from "shared";
 
 export const PROFILES: readonly Profile[] = [
+  { id: "chrome_152", label: "Chrome 152", family: "chromium" },
   { id: "chrome_146", label: "Chrome 146", family: "chromium" },
   { id: "chrome_144", label: "Chrome 144", family: "chromium" },
   { id: "firefox_148", label: "Firefox 148", family: "firefox" },

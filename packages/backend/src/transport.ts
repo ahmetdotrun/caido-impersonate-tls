@@ -11,7 +11,7 @@ import type { BackendSDK } from "./types";
 const START_TIMEOUT_MS = 10_000;
 const STOP_TIMEOUT_MS = 5_000;
 const HEARTBEAT_INTERVAL_MS = 5_000;
-const TRANSPORT_VERSION = "0.1.0";
+const TRANSPORT_VERSION = "0.2.0";
 const BINARY_NAME = "caido-impersonate-transport";
 
 type ReadyEvent = {
@@ -28,6 +28,7 @@ export type TransportRequestEvent =
       statusCode: number;
       protocol: string;
       durationMs: number;
+      warning?: string;
     }
   | {
       event: "request";
@@ -35,6 +36,7 @@ export type TransportRequestEvent =
       outcome: "failed";
       error: string;
       durationMs: number;
+      warning?: string;
     };
 
 type RuntimeFiles = {
@@ -369,7 +371,11 @@ export class TransportService {
         (candidate.outcome !== "succeeded" && candidate.outcome !== "failed") ||
         typeof candidate.durationMs !== "number" ||
         Number.isInteger(candidate.durationMs) === false ||
-        candidate.durationMs < 0
+        candidate.durationMs < 0 ||
+        (candidate.warning !== undefined &&
+          (typeof candidate.warning !== "string" ||
+            candidate.warning.length === 0 ||
+            candidate.warning.length > 500))
       ) {
         return undefined;
       }

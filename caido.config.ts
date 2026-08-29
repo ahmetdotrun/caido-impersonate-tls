@@ -15,7 +15,7 @@ export default defineConfig({
   name: "Impersonate TLS",
   description:
     "Apply browser-like TLS and HTTP transport profiles to domain-scoped Caido traffic.",
-  version: "0.1.0",
+  version: "0.2.0",
   author: {
     name: "A. Eren Kilic",
     email: "aerenkilic@pm.me",

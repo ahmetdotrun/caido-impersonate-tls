@@ -5,7 +5,7 @@ import DataTable from "primevue/datatable";
 import Message from "primevue/message";
 import Tag from "primevue/tag";
 import type { ActivityEntry, ActivityState, Result } from "shared";
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 
 import { useSDK } from "../plugins/sdk";
 
@@ -14,6 +14,9 @@ const entries = ref<ActivityEntry[]>([]);
 const loading = ref(true);
 const clearing = ref(false);
 const error = ref("");
+const warningCount = computed(
+  () => entries.value.filter((entry) => entry.warning !== undefined).length,
+);
 
 function unwrap<T>(result: Result<T>): T {
   if (result.kind === "Error") {
@@ -130,6 +133,11 @@ onMounted(() => void refresh());
       {{ error }}
     </Message>
 
+    <Message v-if="warningCount > 0" severity="warn" :closable="false">
+      {{ warningCount }} request{{ warningCount === 1 ? "" : "s" }} used a
+      Chrome User-Agent that does not match the selected transport profile.
+    </Message>
+
     <Message severity="secondary" :closable="false">
       Kept in memory only, up to 250 entries. Paths, queries, headers, bodies,
       cookies, and transport tokens are never recorded.
@@ -174,6 +182,17 @@ onMounted(() => void refresh());
           </template>
         </Column>
         <Column field="profile" header="Profile" class="whitespace-nowrap" />
+        <Column header="Identity" class="whitespace-nowrap">
+          <template #body="{ data }">
+            <Tag
+              v-if="data.warning !== undefined"
+              value="Mismatch"
+              severity="warn"
+              :title="data.warning"
+            />
+            <span v-else>—</span>
+          </template>
+        </Column>
         <Column header="Result">
           <template #body="{ data }">
             <span :title="formatResult(data)">{{ formatResult(data) }}</span>

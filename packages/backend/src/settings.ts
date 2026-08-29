@@ -11,7 +11,7 @@ const SETTINGS_FILE = "settings.json";
 const DEFAULT_SETTINGS: Settings = {
   enabled: true,
   autoStart: true,
-  defaultProfile: "chrome_146",
+  defaultProfile: "chrome_152",
   headerMode: "preserve",
 };
 

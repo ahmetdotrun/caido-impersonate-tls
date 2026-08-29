@@ -46,6 +46,7 @@ export class ActivityStore {
 
     entry.completedAt = Date.now();
     entry.durationMs = event.durationMs;
+    entry.warning = event.warning;
     if (event.outcome === "succeeded") {
       entry.state = "succeeded";
       entry.statusCode = event.statusCode;

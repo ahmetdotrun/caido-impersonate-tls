@@ -5,6 +5,7 @@ import "testing"
 func TestBundledProfilesAreAvailable(t *testing.T) {
 	pool := newClientPool()
 	for _, profile := range []string{
+		"chrome_152",
 		"chrome_146",
 		"chrome_144",
 		"firefox_148",
