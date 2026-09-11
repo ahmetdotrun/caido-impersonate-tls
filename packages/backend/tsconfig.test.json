@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "rootDir": "../../",
+    "outDir": "../../.cache/backend-tests",
+    "sourceMap": false
+  }
+}

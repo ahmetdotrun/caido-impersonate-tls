@@ -164,6 +164,49 @@ func TestRelayCancelsWhenBrowserDisconnects(t *testing.T) {
 	}
 }
 
+func TestRelayReleasesQueuedBodylessRequestOnDisconnect(t *testing.T) {
+	started := make(chan struct{})
+	var testedServer *Server
+	relay, target, _ := startRelayTest(t, func(_ http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/hold" {
+			t.Errorf("abandoned queued request reached upstream: %s", r.URL.Path)
+			return
+		}
+		close(started)
+		<-r.Context().Done()
+	}, func(server *Server) {
+		testedServer = server
+		server.slots = make(chan struct{}, 1)
+		server.queued = make(chan struct{}, 1)
+		server.limits.queueTimeout = 5 * time.Second
+	})
+	first := dialRelayTest(t, relay, target, "GET", "/hold", "")
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("first request did not start")
+	}
+	waitForQueue := func(want int) {
+		t.Helper()
+		deadline := time.Now().Add(time.Second)
+		for len(testedServer.queued) != want && time.Now().Before(deadline) {
+			time.Sleep(time.Millisecond)
+		}
+		if got := len(testedServer.queued); got != want {
+			t.Fatalf("queue length = %d, want %d", got, want)
+		}
+	}
+	second := dialRelayTest(t, relay, target, "GET", "/abandoned", "")
+	waitForQueue(1)
+	_ = second.Close()
+	waitForQueue(0)
+	third := dialRelayTest(t, relay, target, "GET", "/replacement", "")
+	waitForQueue(1)
+	_ = third.Close()
+	waitForQueue(0)
+	_ = first.Close()
+}
+
 func TestRelayReportsHeaderTimeout(t *testing.T) {
 	relay, target, _ := startRelayTest(t, func(_ http.ResponseWriter, r *http.Request) { <-r.Context().Done() },
 		func(server *Server) { server.limits.headerTimeout = 100 * time.Millisecond })

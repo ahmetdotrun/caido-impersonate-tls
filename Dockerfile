@@ -104,6 +104,7 @@ RUN cd /src/assets/transport && \
     sha256sum linux-amd64/caido-impersonate-transport > checksums.sha256
 
 RUN --network=none pnpm typecheck
+RUN --network=none pnpm test:backend
 RUN --network=none pnpm lint
 RUN --network=none pnpm knip
 RUN --network=none pnpm build

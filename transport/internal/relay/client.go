@@ -1,6 +1,8 @@
 package relay
 
 import (
+	"crypto/x509"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -11,39 +13,109 @@ import (
 	"github.com/bogdanfinn/tls-client/profiles"
 )
 
+const maxPooledClients = 256
+
+var errClientCapacity = errors.New("transport origin-client capacity exhausted")
+
+type clientKey struct {
+	profile   string
+	origin    string
+	websocket bool
+}
+
+type pooledClient struct {
+	client   tls_client.HttpClient
+	users    int
+	lastUsed uint64
+}
+
 type clientPool struct {
-	mu               sync.Mutex
-	clients          map[string]tls_client.HttpClient
-	websocketClients map[string]tls_client.HttpClient
+	mu       sync.Mutex
+	clients  map[clientKey]*pooledClient
+	capacity int
+	clock    uint64
+	closed   bool
+	create   func(string, bool) (tls_client.HttpClient, error)
 }
 
 func newClientPool() *clientPool {
 	return &clientPool{
-		clients:          make(map[string]tls_client.HttpClient),
-		websocketClients: make(map[string]tls_client.HttpClient),
+		clients:  make(map[clientKey]*pooledClient),
+		capacity: maxPooledClients,
+		create: func(profile string, websocket bool) (tls_client.HttpClient, error) {
+			return newProfileClient(profile, websocket, nil)
+		},
 	}
 }
 
-func (pool *clientPool) get(profileName string) (tls_client.HttpClient, error) {
-	return pool.getForProtocol(profileName, false)
-}
-
-func (pool *clientPool) getWebSocket(profileName string) (tls_client.HttpClient, error) {
-	return pool.getForProtocol(profileName, true)
-}
-
-func (pool *clientPool) getForProtocol(profileName string, forceHTTP1 bool) (tls_client.HttpClient, error) {
+// tls-client serializes initial TLS negotiation inside a client. Partition by
+// origin so a slow site cannot hold the transport lock for unrelated traffic.
+// A lease lasts through response-body close (or the WebSocket lifetime).
+func (pool *clientPool) acquire(profileName, origin string, websocket bool) (tls_client.HttpClient, func(), error) {
 	pool.mu.Lock()
-	defer pool.mu.Unlock()
+	var evicted tls_client.HttpClient
+	defer func() {
+		pool.mu.Unlock()
+		if evicted != nil {
+			evicted.CloseIdleConnections()
+		}
+	}()
+	if pool.closed {
+		return nil, nil, errors.New("transport client pool is closed")
+	}
+	key := clientKey{profileName, strings.ToLower(origin), websocket}
+	entry := pool.clients[key]
+	if entry == nil {
+		if len(pool.clients) >= pool.capacity {
+			var oldest *pooledClient
+			var oldestKey clientKey
+			for candidateKey, candidate := range pool.clients {
+				if candidate.users == 0 && (oldest == nil || candidate.lastUsed < oldest.lastUsed) {
+					oldest, oldestKey = candidate, candidateKey
+				}
+			}
+			if oldest == nil {
+				return nil, nil, errClientCapacity
+			}
+			delete(pool.clients, oldestKey)
+			evicted = oldest.client
+		}
+		client, err := pool.create(profileName, websocket)
+		if err != nil {
+			return nil, nil, err
+		}
+		entry = &pooledClient{client: client}
+		pool.clients[key] = entry
+	}
+	pool.clock++
+	entry.lastUsed = pool.clock
+	entry.users++
+	release := sync.OnceFunc(func() {
+		pool.mu.Lock()
+		entry.users--
+		pool.clock++
+		entry.lastUsed = pool.clock
+		closed := pool.closed
+		pool.mu.Unlock()
+		if closed {
+			entry.client.CloseIdleConnections()
+		}
+	})
+	return entry.client, release, nil
+}
 
+func (pool *clientPool) close() {
+	pool.mu.Lock()
+	pool.closed = true
 	clients := pool.clients
-	if forceHTTP1 {
-		clients = pool.websocketClients
+	pool.clients = make(map[clientKey]*pooledClient)
+	pool.mu.Unlock()
+	for _, entry := range clients {
+		entry.client.CloseIdleConnections()
 	}
-	if client, found := clients[profileName]; found {
-		return client, nil
-	}
+}
 
+func newProfileClient(profileName string, forceHTTP1 bool, roots *x509.CertPool) (tls_client.HttpClient, error) {
 	profile, found := customTransportProfiles[profileName]
 	if !found {
 		profile, found = profiles.MappedTLSClients[profileName]
@@ -60,8 +132,9 @@ func (pool *clientPool) getForProtocol(profileName string, forceHTTP1 bool) (tls
 		tls_client.WithTimeoutSeconds(0),
 		tls_client.WithDialer(net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}),
 		tls_client.WithTransportOptions(&tls_client.TransportOptions{
+			RootCAs:                roots,
 			DisableCompression:     true,
-			MaxIdleConns:           128,
+			MaxIdleConns:           16,
 			MaxIdleConnsPerHost:    16,
 			MaxResponseHeaderBytes: maxHeaderBytes,
 		}),
@@ -81,6 +154,5 @@ func (pool *clientPool) getForProtocol(profileName string, forceHTTP1 bool) (tls
 		return nil, fmt.Errorf("create transport profile %q: %w", profileName, err)
 	}
 
-	clients[profileName] = client
 	return client, nil
 }

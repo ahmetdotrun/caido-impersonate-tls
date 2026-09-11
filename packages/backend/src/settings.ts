@@ -1,9 +1,11 @@
-import { mkdir, readFile, rename, writeFile } from "fs/promises";
+import { randomBytes } from "crypto";
+import { mkdir, open, readFile, rename, rm } from "fs/promises";
 import path from "path";
 
 import type { Settings } from "shared";
 
 import { isKnownProfile } from "./profiles";
+import { SerialQueue } from "./serial";
 import type { BackendSDK } from "./types";
 
 const SETTINGS_FILE = "settings.json";
@@ -17,23 +19,36 @@ const DEFAULT_SETTINGS: Settings = {
 };
 
 export class SettingsStore {
-  private settings: Settings = { ...DEFAULT_SETTINGS };
+  private settings: Settings | undefined;
+  private readonly operations = new SerialQueue();
+  private loadError = "Settings have not been loaded";
 
   public get(): Settings {
+    if (this.settings === undefined) {
+      throw new Error(this.loadError);
+    }
     return { ...this.settings };
   }
 
-  public async load(sdk: BackendSDK): Promise<Settings> {
+  public load(sdk: BackendSDK): Promise<Settings> {
+    return this.operations.run(() => this.loadInternal(sdk));
+  }
+
+  private async loadInternal(sdk: BackendSDK): Promise<Settings> {
     const settingsPath = this.getPath(sdk);
 
     try {
       const content = await readFile(settingsPath, "utf8");
       this.settings = this.parse(JSON.parse(content) as unknown);
     } catch (error) {
-      if (this.isMissingFile(error) === false) {
-        sdk.console.error(
-          `[Impersonate TLS] Failed to load settings: ${String(error)}`,
-        );
+      if (this.isMissingFile(error)) {
+        this.settings = { ...DEFAULT_SETTINGS };
+      } else {
+        // A damaged or unreadable file is not permission to change the profile,
+        // upload policy, or enablement. Preserve the file and require repair.
+        this.settings = undefined;
+        this.loadError = `Failed to load settings: ${String(error)}`;
+        throw new Error(this.loadError);
       }
     }
 
@@ -41,12 +56,29 @@ export class SettingsStore {
   }
 
   public async save(sdk: BackendSDK, settings: Settings): Promise<Settings> {
+    const snapshot = this.parse(settings);
+    return this.operations.run(() => this.saveInternal(sdk, snapshot));
+  }
+
+  private async saveInternal(
+    sdk: BackendSDK,
+    settings: Settings,
+  ): Promise<Settings> {
     const settingsPath = this.getPath(sdk);
-    const temporaryPath = `${settingsPath}.tmp`;
+    const temporaryPath = `${settingsPath}.${randomBytes(16).toString("hex")}.tmp`;
 
     await mkdir(path.dirname(settingsPath), { recursive: true });
-    await writeFile(temporaryPath, JSON.stringify(settings, null, 2));
-    await rename(temporaryPath, settingsPath);
+    try {
+      const file = await open(temporaryPath, "wx", 0o600);
+      try {
+        await file.writeFile(JSON.stringify(settings, null, 2));
+      } finally {
+        await file.close();
+      }
+      await rename(temporaryPath, settingsPath);
+    } finally {
+      await rm(temporaryPath, { force: true });
+    }
 
     this.settings = { ...settings };
     sdk.api.send("settings:updated", this.get());

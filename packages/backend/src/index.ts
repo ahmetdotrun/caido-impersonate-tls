@@ -20,7 +20,11 @@ let transport: TransportService | undefined;
 let activity: ActivityStore | undefined;
 
 function getSettings(_sdk: BackendSDK): Result<Settings> {
-  return { kind: "Ok", value: settingsStore.get() };
+  try {
+    return { kind: "Ok", value: settingsStore.get() };
+  } catch (error) {
+    return { kind: "Error", error: String(error) };
+  }
 }
 
 async function updateSettings(
@@ -135,10 +139,16 @@ export async function init(sdk: SDK<Spec>): Promise<void> {
   sdk.api.register("startTransport", startTransport);
   sdk.api.register("stopTransport", stopTransport);
 
-  await settingsStore.load(backendSDK);
   sdk.events.onUpstream(
     createUpstreamHandler(transport, () => settingsStore.get(), activityStore),
   );
+
+  try {
+    await settingsStore.load(backendSDK);
+  } catch (error) {
+    sdk.console.error(`[Impersonate TLS] ${String(error)}`);
+    return;
+  }
 
   const settings = settingsStore.get();
   if (settings.enabled && settings.autoStart) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/url"
 	"strings"
@@ -99,23 +100,46 @@ func forwardContext(ctx context.Context, pool *clientPool, request *incomingRequ
 		upstream.Header[fhttp.HeaderOrderKey] = headerOrder
 	}
 
-	client, err := pool.get(metadata.Profile)
-	if websocketUpgrade {
-		client, err = pool.getWebSocket(metadata.Profile)
-	}
+	client, release, err := pool.acquire(metadata.Profile, metadata.Scheme+"://"+authority, websocketUpgrade)
 	if err != nil {
 		return nil, err
 	}
 
 	response, err := client.Do(upstream)
 	if err != nil {
+		release()
 		var urlError *url.Error
 		if errors.As(err, &urlError) {
 			return nil, fmt.Errorf("upstream request: %w", urlError.Err)
 		}
 		return nil, errors.New("upstream request failed")
 	}
+	body := &leasedBody{ReadCloser: response.Body, release: release}
+	if duplex, ok := response.Body.(io.ReadWriteCloser); ok {
+		response.Body = &leasedDuplexBody{leasedBody: body, writer: duplex}
+	} else {
+		response.Body = body
+	}
 	return response, nil
+}
+
+type leasedBody struct {
+	io.ReadCloser
+	release func()
+}
+
+func (body *leasedBody) Close() error {
+	defer body.release()
+	return body.ReadCloser.Close()
+}
+
+type leasedDuplexBody struct {
+	*leasedBody
+	writer io.Writer
+}
+
+func (body *leasedDuplexBody) Write(buffer []byte) (int, error) {
+	return body.writer.Write(buffer)
 }
 
 func (request *incomingRequest) connectionHeaderNames() map[string]struct{} {

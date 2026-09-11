@@ -72,6 +72,7 @@ func (server *Server) Serve(ctx context.Context, listener net.Listener) error {
 		_ = listener.Close()
 		stopListener()
 		workers.Wait()
+		server.clients.close()
 	}()
 	// Bound header readers as well as authenticated work and the wait queue.
 	accepted := make(chan struct{}, cap(server.slots)+cap(server.websocketSlots)+cap(server.queued))
@@ -146,6 +147,23 @@ func (server *Server) handleContext(parent context.Context, connection net.Conn)
 	stopRead := context.AfterFunc(ctx, func() { _ = connection.SetReadDeadline(time.Now()) })
 	defer stopRead()
 	websocket := request.isWebSocketUpgrade()
+	// Bodyless requests can be watched while queued. Uploads must keep their
+	// unread bytes intact; their monitor starts only when the body is consumed.
+	bodyDone := make(chan struct{})
+	if request.Body == nil {
+		close(bodyDone)
+	}
+	if !websocket {
+		go func() {
+			select {
+			case <-ctx.Done():
+				return
+			case <-bodyDone:
+			}
+			_, _ = io.Copy(io.Discard, reader)
+			cancel(context.Canceled)
+		}()
+	}
 	slots := server.slots
 	if websocket {
 		slots = server.websocketSlots
@@ -160,24 +178,8 @@ func (server *Server) handleContext(parent context.Context, connection net.Conn)
 	watch := newActivityDeadline(cancel)
 	defer watch.stop()
 	watch.reset(server.limits.headerTimeout)
-	bodyDone := make(chan struct{})
-	if request.Body == nil {
-		close(bodyDone)
-	} else {
+	if request.Body != nil {
 		request.Body = &progressReader{reader: request.Body, watch: watch, timeout: server.limits.idleTimeout, remaining: request.BodyLength, done: bodyDone}
-	}
-	if !websocket {
-		// One request owns this connection. Once its upload is consumed, EOF
-		// means Caido has cancelled it; propagate that to the upstream stream.
-		go func() {
-			select {
-			case <-ctx.Done():
-				return
-			case <-bodyDone:
-			}
-			_, _ = io.Copy(io.Discard, reader)
-			cancel(context.Canceled)
-		}()
 	}
 	requestContext := httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
 		WroteRequest: func(httptrace.WroteRequestInfo) { watch.reset(server.limits.headerTimeout) },
@@ -185,6 +187,9 @@ func (server *Server) handleContext(parent context.Context, connection net.Conn)
 	response, err := forwardContext(requestContext, server.clients, request, metadata)
 	if err != nil {
 		status := http.StatusBadGateway
+		if errors.Is(err, errClientCapacity) {
+			status = http.StatusServiceUnavailable
+		}
 		if errors.Is(err, errBodyTooLarge) {
 			status = http.StatusRequestEntityTooLarge
 		}
@@ -282,6 +287,9 @@ func (server *Server) handleContext(parent context.Context, connection net.Conn)
 }
 
 func (server *Server) acquire(ctx context.Context, slots chan struct{}) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	select {
 	case slots <- struct{}{}:
 		return nil

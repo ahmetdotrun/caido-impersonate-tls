@@ -16,7 +16,7 @@ import (
 	"github.com/caido-impersonate-tls/transport/internal/relay"
 )
 
-const version = "0.2.3"
+const version = "0.2.4"
 const minimumTokenLength = 32
 const ownerPollInterval = 5 * time.Second
 const ownerTimeout = 20 * time.Second

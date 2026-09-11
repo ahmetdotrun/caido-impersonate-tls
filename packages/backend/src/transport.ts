@@ -14,12 +14,13 @@ import path from "path";
 
 import type { Result, TransportStatus } from "shared";
 
+import { SerialQueue } from "./serial";
 import type { BackendSDK } from "./types";
 
 const START_TIMEOUT_MS = 10_000;
 const STOP_TIMEOUT_MS = 5_000;
 const HEARTBEAT_INTERVAL_MS = 5_000;
-const TRANSPORT_VERSION = "0.2.3";
+const TRANSPORT_VERSION = "0.2.4";
 const BINARY_NAME = "caido-impersonate-transport";
 
 type ReadyEvent = {
@@ -54,7 +55,7 @@ type RuntimeFiles = {
 
 export class TransportService {
   private child: ChildProcess | undefined;
-  private startInFlight: Promise<Result<TransportStatus>> | undefined;
+  private readonly operations = new SerialQueue();
   private heartbeatTimer: Timeout | undefined;
   private runtimeFiles: RuntimeFiles | undefined;
   private token: string | undefined;
@@ -87,20 +88,8 @@ export class TransportService {
     return { port: this.status.port, token: this.token };
   }
 
-  public async start(): Promise<Result<TransportStatus>> {
-    if (this.startInFlight !== undefined) {
-      return this.startInFlight;
-    }
-
-    const operation = this.startInternal();
-    this.startInFlight = operation;
-    try {
-      return await operation;
-    } finally {
-      if (this.startInFlight === operation) {
-        this.startInFlight = undefined;
-      }
-    }
+  public start(): Promise<Result<TransportStatus>> {
+    return this.operations.run(() => this.startInternal());
   }
 
   private async startInternal(): Promise<Result<TransportStatus>> {
@@ -119,6 +108,8 @@ export class TransportService {
     this.setStatus({ state: "starting", platform, error: undefined });
 
     try {
+      // A previous failed stop must not orphan its still-tracked process.
+      await this.terminateChild();
       const binaryPath = await this.installBinary(platform);
       const token = randomBytes(32).toString("hex");
       const runtimeFiles = await this.prepareRuntimeFiles(token);
@@ -148,10 +139,10 @@ export class TransportService {
           `Transport version mismatch: expected ${TRANSPORT_VERSION}, received ${ready.version}`,
         );
       }
+      await rm(runtimeFiles.tokenPath, { force: true });
       if (this.child !== child) {
         throw new Error("Transport exited immediately after readiness");
       }
-      await rm(runtimeFiles.tokenPath, { force: true });
       this.setStatus({
         state: "running",
         platform,
@@ -162,25 +153,29 @@ export class TransportService {
 
       return { kind: "Ok", value: this.getStatus() };
     } catch (error) {
-      await this.terminateChild();
+      try {
+        await this.terminateChild();
+      } catch (cleanupError) {
+        return this.fail(
+          "error",
+          `${String(error)}; cleanup: ${String(cleanupError)}`,
+        );
+      }
       return this.fail("error", String(error));
     }
   }
 
-  public async stop(): Promise<Result<TransportStatus>> {
-    if (this.startInFlight !== undefined) {
-      await this.startInFlight;
-    }
+  public stop(): Promise<Result<TransportStatus>> {
+    return this.operations.run(() => this.stopInternal());
+  }
 
-    if (this.child === undefined) {
-      this.token = undefined;
-      await this.cleanupRuntimeFiles();
-      this.setStatus({ state: "idle", port: undefined, error: undefined });
-      return { kind: "Ok", value: this.getStatus() };
-    }
-
+  private async stopInternal(): Promise<Result<TransportStatus>> {
     this.setStatus({ state: "stopping", error: undefined });
-    await this.terminateChild();
+    try {
+      await this.terminateChild();
+    } catch (error) {
+      return this.fail("error", String(error));
+    }
     this.token = undefined;
     this.setStatus({ state: "idle", port: undefined, error: undefined });
     return { kind: "Ok", value: this.getStatus() };
@@ -335,10 +330,17 @@ export class TransportService {
       });
 
       child.once("close", (code, signal) => {
+        if (this.child !== child) {
+          return;
+        }
         const wasStarting = this.status.state === "starting";
         this.child = undefined;
         this.token = undefined;
-        void this.cleanupRuntimeFiles();
+        void this.cleanupRuntimeFiles().catch((error: unknown) => {
+          this.sdk.console.error(
+            `[Impersonate TLS] Runtime cleanup failed: ${String(error)}`,
+          );
+        });
 
         const exitReason =
           code === null ? `signal ${String(signal)}` : `code ${code}`;
@@ -433,26 +435,40 @@ export class TransportService {
       return;
     }
 
-    await new Promise<void>((resolve) => {
+    this.stopHeartbeat();
+    await new Promise<void>((resolve, reject) => {
       let settled = false;
+      let forcedTimeout: Timeout | undefined;
       const finish = (): void => {
         if (settled === false) {
           settled = true;
           clearTimeout(timeout);
+          if (forcedTimeout !== undefined) {
+            clearTimeout(forcedTimeout);
+          }
           resolve();
         }
       };
 
       const timeout = setTimeout(() => {
         child.kill("SIGKILL");
-        finish();
+        // Sending a signal is not proof of exit. Keep ownership until close.
+        forcedTimeout = setTimeout(() => {
+          if (settled === false) {
+            settled = true;
+            child.removeListener("close", finish);
+            reject(new Error("Transport did not exit after SIGKILL"));
+          }
+        }, STOP_TIMEOUT_MS);
       }, STOP_TIMEOUT_MS);
 
       child.once("close", finish);
       child.kill("SIGTERM");
     });
 
-    this.child = undefined;
+    if (this.child === child) {
+      this.child = undefined;
+    }
     await this.cleanupRuntimeFiles();
   }
 

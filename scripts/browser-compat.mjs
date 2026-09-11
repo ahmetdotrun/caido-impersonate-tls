@@ -17,6 +17,12 @@ const container = process.env.COMPAT_CONTAINER;
 const originHost = process.env.COMPAT_ORIGIN_HOST;
 const expectedSource = process.env.COMPAT_EXPECTED_SOURCE;
 const skipLargeTransfers = process.env.COMPAT_SKIP_LARGE_TRANSFERS === "1";
+const httpsURL = new URL(
+  process.env.COMPAT_HTTPS_URL ?? "https://example.com/",
+);
+const httpsText = process.env.COMPAT_HTTPS_TEXT ?? "Example Domain";
+assert.equal(httpsURL.protocol, "https:", "HTTPS smoke URL must use TLS");
+assert(httpsText.length > 0, "HTTPS smoke check needs expected page text");
 assert(
   container && isIP(originHost) && isIP(expectedSource),
   "Set COMPAT_CONTAINER, COMPAT_ORIGIN_HOST (a local IP reachable by Caido), and COMPAT_EXPECTED_SOURCE (Caido's source IP)",
@@ -291,6 +297,24 @@ try {
     const lane = lanes[index];
     const run = index === 0 ? cli : ui;
     const followup = index === 0 ? ui : cli;
+    await check(`${lane}: trusted HTTPS navigation`, async () => {
+      try {
+        await run(lane, "open", httpsURL.href);
+        const state = await evaluate(
+          followup,
+          lane,
+          "JSON.stringify({url:location.href,secure:isSecureContext,text:document.body.innerText})",
+        );
+        assert.equal(new URL(state.url).origin, httpsURL.origin);
+        assert.equal(state.secure, true);
+        assert(
+          state.text.includes(httpsText),
+          "Expected HTTPS content not received",
+        );
+      } finally {
+        await run(lane, "open", `${base}/`);
+      }
+    });
     await check(`${lane}: cross-entry-point session continuity`, async () => {
       await evaluate(
         run,
