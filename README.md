@@ -46,16 +46,17 @@ Activity is memory-only and limited to 250 entries. Paths, queries, headers, bod
 - Chrome profiles permute ClientHello extension order on each new handshake, matching modern Chromium behaviour while keeping their JA4 and HTTP/2 identity stable.
 - Certificate verification and fail-closed transport behavior.
 - Original request headers and response content encodings preserved where possible.
+- RFC 6455 WebSockets use the selected TLS profile with an HTTP/1.1 Upgrade handshake and a bidirectional tunnel.
 - Private per-request loopback connections.
 - Linux x86_64 only.
 
 ## Limitations
 
 - Request bodies are buffered with a 64 MiB limit.
-- Each Caido-to-plugin connection handles one request.
+- Each Caido-to-plugin connection handles one HTTP request or one WebSocket lifetime.
 - Browser profiles are captured snapshots and may trail current release channels.
 - The plugin preserves supplied HTTP headers; it does not rewrite the User-Agent or generate a browser-coherent header set, so headers must remain aligned with the selected profile.
-- HTTP/3/QUIC, WebSockets, and custom ClientHello or JA3/JA4_r import are not implemented.
+- HTTP/3/QUIC and custom ClientHello or JA3/JA4_r import are not implemented.
 
 Use this plugin only on systems you are authorized to test.
 

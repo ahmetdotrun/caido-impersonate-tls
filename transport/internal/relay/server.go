@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -114,6 +115,52 @@ func (server *Server) handle(connection net.Conn) {
 		writeError(connection, http.StatusBadGateway, err.Error())
 		return
 	}
+	if request.isWebSocketUpgrade() && response.StatusCode == http.StatusSwitchingProtocols {
+		upstream, ok := response.Body.(io.ReadWriteCloser)
+		if !ok {
+			_ = response.Body.Close()
+			message := "upstream protocol switch did not provide a bidirectional connection"
+			server.logger.Printf("%s %s: %s", request.Method, metadata.Host, message)
+			server.logActivity(requestEvent{
+				Event:      "request",
+				ID:         metadata.Trace,
+				Outcome:    "failed",
+				DurationMS: time.Since(startedAt).Milliseconds(),
+				Error:      message,
+				Warning:    warning,
+			})
+			writeError(connection, http.StatusBadGateway, message)
+			return
+		}
+		if err := writeSwitchingProtocols(connection, response); err != nil {
+			_ = upstream.Close()
+			server.logger.Printf("write websocket response: %v", err)
+			server.logActivity(requestEvent{
+				Event:      "request",
+				ID:         metadata.Trace,
+				Outcome:    "failed",
+				DurationMS: time.Since(startedAt).Milliseconds(),
+				Error:      truncateActivityError("write response: " + err.Error()),
+				Warning:    warning,
+			})
+			return
+		}
+
+		server.logActivity(requestEvent{
+			Event:      "request",
+			ID:         metadata.Trace,
+			Outcome:    "succeeded",
+			StatusCode: response.StatusCode,
+			Protocol:   response.Proto,
+			DurationMS: time.Since(startedAt).Milliseconds(),
+			Warning:    warning,
+		})
+		_ = connection.SetDeadline(time.Time{})
+		if err := bridgeProtocolSwitch(connection, reader, upstream); err != nil {
+			server.logger.Printf("websocket relay %s: %v", metadata.Host, err)
+		}
+		return
+	}
 
 	if err := writeResponse(connection, request.Method, response); err != nil {
 		server.logger.Printf("write response: %v", err)
@@ -137,6 +184,34 @@ func (server *Server) handle(connection net.Conn) {
 		DurationMS: time.Since(startedAt).Milliseconds(),
 		Warning:    warning,
 	})
+}
+
+func bridgeProtocolSwitch(
+	downstream net.Conn,
+	downstreamReader io.Reader,
+	upstream io.ReadWriteCloser,
+) error {
+	results := make(chan error, 2)
+	go func() {
+		_, err := io.Copy(upstream, downstreamReader)
+		results <- err
+	}()
+	go func() {
+		_, err := io.Copy(downstream, upstream)
+		results <- err
+	}()
+
+	first := <-results
+	_ = upstream.Close()
+	_ = downstream.Close()
+	second := <-results
+	if first != nil && !errors.Is(first, net.ErrClosed) {
+		return first
+	}
+	if second != nil && !errors.Is(second, net.ErrClosed) {
+		return second
+	}
+	return nil
 }
 
 func (server *Server) logActivity(event requestEvent) {

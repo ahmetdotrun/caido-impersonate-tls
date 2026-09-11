@@ -94,6 +94,34 @@ func writeResponse(writer io.Writer, method string, response *fhttp.Response) er
 	return err
 }
 
+func writeSwitchingProtocols(writer io.Writer, response *fhttp.Response) error {
+	buffered := bufio.NewWriterSize(writer, 64*1024)
+	status := response.Status
+	if status == "" {
+		status = fmt.Sprintf("%d %s", response.StatusCode, http.StatusText(response.StatusCode))
+	}
+	if _, err := fmt.Fprintf(buffered, "HTTP/1.1 %s\r\n", status); err != nil {
+		return err
+	}
+
+	for name, values := range response.Header {
+		lowerName := strings.ToLower(name)
+		if lowerName == "content-length" || lowerName == "transfer-encoding" || lowerName == "trailer" {
+			continue
+		}
+		for _, value := range values {
+			if _, err := fmt.Fprintf(buffered, "%s: %s\r\n", name, value); err != nil {
+				return err
+			}
+		}
+	}
+
+	if _, err := io.WriteString(buffered, "\r\n"); err != nil {
+		return err
+	}
+	return buffered.Flush()
+}
+
 func writeError(writer io.Writer, statusCode int, message string) {
 	body := http.StatusText(statusCode)
 	if message != "" {

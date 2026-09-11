@@ -154,6 +154,72 @@ func TestForwardPreservesGeneratedHeaderPositions(t *testing.T) {
 	}
 }
 
+func TestForwardPreservesWebSocketUpgradeHeaders(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer listener.Close()
+
+	captured := make(chan []string, 1)
+	go func() {
+		connection, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			captured <- nil
+			return
+		}
+		defer connection.Close()
+		reader := bufio.NewReader(connection)
+		var lines []string
+		for {
+			line, readErr := reader.ReadString('\n')
+			if readErr != nil {
+				captured <- nil
+				return
+			}
+			line = strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
+			if line == "" {
+				break
+			}
+			lines = append(lines, line)
+		}
+		captured <- lines
+		_, _ = io.WriteString(connection, "HTTP/1.1 426 Upgrade Required\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+	}()
+
+	host, port, err := net.SplitHostPort(listener.Addr().String())
+	if err != nil {
+		t.Fatalf("split listener address: %v", err)
+	}
+	request := &incomingRequest{
+		Method:     http.MethodGet,
+		RequestURI: "/socket",
+		Protocol:   "HTTP/1.1",
+		Headers: []header{
+			{Name: "Host", Value: net.JoinHostPort(host, port)},
+			{Name: "Connection", Value: "Upgrade"},
+			{Name: "Upgrade", Value: "websocket"},
+			{Name: "Sec-WebSocket-Version", Value: "13"},
+			{Name: "Sec-WebSocket-Key", Value: "dGhlIHNhbXBsZSBub25jZQ=="},
+		},
+	}
+	metadata := routeMetadata{Scheme: "http", Host: host, Port: port, Profile: "chrome_152_cft"}
+
+	response, err := forward(newClientPool(), request, metadata)
+	if err != nil {
+		t.Fatalf("forward: %v", err)
+	}
+	response.Body.Close()
+
+	lines := <-captured
+	joined := strings.ToLower(strings.Join(lines, "\n"))
+	for _, expected := range []string{"connection: upgrade", "upgrade: websocket", "sec-websocket-key:"} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("missing %q in forwarded handshake:\n%s", expected, joined)
+		}
+	}
+}
+
 func headerLineIndex(lines []string, name string) int {
 	prefix := strings.ToLower(name) + ":"
 	for index, line := range lines {

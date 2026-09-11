@@ -49,6 +49,7 @@ func forward(pool *clientPool, request *incomingRequest, metadata routeMetadata)
 		return nil, errors.New("create upstream request failed")
 	}
 
+	websocketUpgrade := request.isWebSocketUpgrade()
 	connectionHeaders := request.connectionHeaderNames()
 	headerOrder := make([]string, 0, len(request.Headers))
 	orderedHeaders := make(map[string]struct{}, len(request.Headers))
@@ -64,10 +65,11 @@ func forward(pool *clientPool, request *incomingRequest, metadata routeMetadata)
 		if _, internal := internalHeaderNames[lowerName]; internal {
 			continue
 		}
-		if _, hop := fixedHopHeaders[lowerName]; hop {
+		websocketHeader := lowerName == "connection" || lowerName == "upgrade"
+		if _, hop := fixedHopHeaders[lowerName]; hop && !(websocketUpgrade && websocketHeader) {
 			continue
 		}
-		if _, hop := connectionHeaders[lowerName]; hop {
+		if _, hop := connectionHeaders[lowerName]; hop && !(websocketUpgrade && websocketHeader) {
 			continue
 		}
 
@@ -92,6 +94,9 @@ func forward(pool *clientPool, request *incomingRequest, metadata routeMetadata)
 	}
 
 	client, err := pool.get(metadata.Profile)
+	if websocketUpgrade {
+		client, err = pool.getWebSocket(metadata.Profile)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -121,4 +126,12 @@ func (request *incomingRequest) connectionHeaderNames() map[string]struct{} {
 		}
 	}
 	return names
+}
+
+func (request *incomingRequest) isWebSocketUpgrade() bool {
+	if !strings.EqualFold(request.firstHeader("Upgrade"), "websocket") {
+		return false
+	}
+	_, found := request.connectionHeaderNames()["upgrade"]
+	return found
 }

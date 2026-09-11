@@ -202,6 +202,118 @@ func TestServerKeepsCertificateVerificationEnabled(t *testing.T) {
 	}
 }
 
+func TestServerRelaysWebSocketUpgrade(t *testing.T) {
+	target, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen target: %v", err)
+	}
+	defer target.Close()
+	targetResult := make(chan error, 1)
+	go func() {
+		connection, acceptErr := target.Accept()
+		if acceptErr != nil {
+			targetResult <- acceptErr
+			return
+		}
+		defer connection.Close()
+		_ = connection.SetDeadline(time.Now().Add(5 * time.Second))
+		reader := bufio.NewReader(connection)
+		for {
+			line, readErr := reader.ReadString('\n')
+			if readErr != nil {
+				targetResult <- readErr
+				return
+			}
+			if line == "\r\n" {
+				break
+			}
+		}
+		if _, writeErr := io.WriteString(connection,
+			"HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: test\r\n\r\n"); writeErr != nil {
+			targetResult <- writeErr
+			return
+		}
+		line, readErr := reader.ReadString('\n')
+		if readErr != nil {
+			targetResult <- readErr
+			return
+		}
+		if line != "ping\n" {
+			targetResult <- fmt.Errorf("upgraded payload = %q", line)
+			return
+		}
+		_, writeErr := io.WriteString(connection, "pong\n")
+		targetResult <- writeErr
+	}()
+
+	host, port, err := net.SplitHostPort(target.Addr().String())
+	if err != nil {
+		t.Fatalf("split target: %v", err)
+	}
+	serverSide, clientSide := net.Pipe()
+	token := "correct-token-with-at-least-32-bytes"
+	events := make(chan []byte, 1)
+	server := NewServer(token, log.New(io.Discard, "", 0), log.New(channelWriter(events), "", 0))
+	go server.handle(serverSide)
+	defer clientSide.Close()
+	_ = clientSide.SetDeadline(time.Now().Add(5 * time.Second))
+
+	request := privateRequestForScheme(token, "http", host, port, "/socket", "")
+	request = strings.Replace(request, "Connection: close", strings.Join([]string{
+		"Connection: Upgrade",
+		"Upgrade: websocket",
+		"Sec-WebSocket-Version: 13",
+		"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==",
+	}, "\r\n"), 1)
+	if _, err := io.WriteString(clientSide, request); err != nil {
+		t.Fatalf("write handshake: %v", err)
+	}
+
+	reader := bufio.NewReader(clientSide)
+	status, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("read status: %v", err)
+	}
+	if !strings.Contains(status, "101 Switching Protocols") {
+		t.Fatalf("status = %q", status)
+	}
+	for {
+		line, readErr := reader.ReadString('\n')
+		if readErr != nil {
+			t.Fatalf("read response headers: %v", readErr)
+		}
+		if line == "\r\n" {
+			break
+		}
+	}
+	if _, err := io.WriteString(clientSide, "ping\n"); err != nil {
+		t.Fatalf("write upgraded payload: %v", err)
+	}
+	payload, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("read upgraded payload: %v", err)
+	}
+	if payload != "pong\n" {
+		t.Fatalf("upgraded payload = %q", payload)
+	}
+	if err := <-targetResult; err != nil {
+		t.Fatalf("target: %v", err)
+	}
+
+	select {
+	case line := <-events:
+		var event requestEvent
+		if err := json.Unmarshal(line, &event); err != nil {
+			t.Fatalf("decode activity event: %v", err)
+		}
+		if event.Outcome != "succeeded" || event.StatusCode != http.StatusSwitchingProtocols {
+			t.Fatalf("unexpected activity event: %#v", event)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("activity event was not emitted")
+	}
+}
+
 func privateRequest(token, host, port, path string) string {
 	return privateRequestForScheme(token, "http", host, port, path, "")
 }
