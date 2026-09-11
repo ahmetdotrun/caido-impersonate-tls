@@ -32,7 +32,7 @@ This design does not create a Caido HTTP/SOCKS proxy, expose a general proxy end
 
 1. Download `plugin_package.zip` from the latest release.
 2. Install the ZIP from Caido's Plugins page.
-3. Open **Impersonate TLS** and confirm that the transport is running.
+3. Open **Impersonate TLS**, confirm that the transport is running, and select the profile measured for your actual browser build. The default **Chrome 152** profile and **Chrome for Testing 152 (Linux)** have different ClientHello extensions despite sharing a major version. The latter matches the Linux Chrome for Testing 152.0.7977.54 and 152.0.7977.82 builds tested with agent-browser; compare the destination-observed TLS and HTTP/2 fingerprints after a browser or profile change.
 4. In **Settings → Upstream Plugins**, add a rule for this plugin. Use `*` to include every domain or a narrower domain pattern for selective routing.
 5. Send requests normally from Proxy, Replay, Automate, or workflows.
 6. Check the **Activity** tab for routing state, profile, response status, protocol, duration, transport errors, and Chrome identity mismatches.
@@ -41,7 +41,7 @@ Activity is memory-only and limited to 250 entries. Paths, queries, headers, bod
 
 ## Current scope
 
-- A local Chrome 152 profile plus pinned `tls-client` v1.15.1 profiles for Chrome 146/144, Firefox 148/147, Safari iOS 26.0/18.5, and OkHttp 4.10 on Android 13.
+- Local Chrome 152 and Linux Chrome for Testing 152 profiles plus pinned `tls-client` v1.15.1 profiles for Chrome 146/144, Firefox 148/147, Safari iOS 26.0/18.5, and OkHttp 4.10 on Android 13.
 - HTTPS negotiates HTTP/2 or HTTP/1.1 through ALPN; plain HTTP uses HTTP/1.1.
 - Chrome profiles permute ClientHello extension order on each new handshake, matching modern Chromium behaviour while keeping their JA4 and HTTP/2 identity stable.
 - Certificate verification and fail-closed transport behavior.

@@ -45,6 +45,44 @@ func TestChrome152ProfileIdentity(t *testing.T) {
 	}
 }
 
+func TestChrome152CfTProfilePreservesDefaultAndAddsMeasuredExtensions(t *testing.T) {
+	for _, name := range []string{"chrome_152", "chrome_152_cft"} {
+		t.Run(name, func(t *testing.T) {
+			profile := customTransportProfiles[name]
+			spec, err := profile.GetClientHelloSpec()
+			if err != nil {
+				t.Fatal(err)
+			}
+			var padding, anchors []byte
+			for _, extension := range spec.Extensions {
+				if generic, ok := extension.(*tls.GenericExtension); ok {
+					switch generic.Id {
+					case 4832:
+						padding = generic.Data
+					case 0xca34:
+						anchors = generic.Data
+					}
+				}
+			}
+			if name == "chrome_152_cft" {
+				if !bytes.Equal(padding, []byte{0, 0}) {
+					t.Fatalf("server_padding = %x, want 0000", padding)
+				}
+				if !bytes.Equal(anchors, chrome152CfTTrustAnchors) || len(anchors) != 206 {
+					t.Fatalf("unexpected CfT trust anchor snapshot: %x", anchors)
+				}
+			} else if padding != nil || !bytes.Equal(anchors, chrome152TrustAnchors) {
+				t.Fatal("default Chrome 152 profile changed")
+			}
+			if !reflect.DeepEqual(profile.GetSettings(), customTransportProfiles["chrome_152"].GetSettings()) ||
+				!reflect.DeepEqual(profile.GetSettingsOrder(), customTransportProfiles["chrome_152"].GetSettingsOrder()) ||
+				!reflect.DeepEqual(profile.GetPseudoHeaderOrder(), customTransportProfiles["chrome_152"].GetPseudoHeaderOrder()) {
+				t.Fatal("HTTP/2 profile differs from Chrome 152")
+			}
+		})
+	}
+}
+
 func TestChrome152SignatureAlgorithmGREASE(t *testing.T) {
 	profile := customTransportProfiles["chrome_152"]
 	seen := make(map[tls.SignatureScheme]struct{})

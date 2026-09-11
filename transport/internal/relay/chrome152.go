@@ -16,18 +16,30 @@ const chrome152TrustAnchorsCapture = "00b80582df13020108839a648c9b2d010c08839a64
 
 var chrome152TrustAnchors = shuffledTrustAnchors(chrome152TrustAnchorsCapture)
 
+// Chrome for Testing 152.0.7977.54 and 152.0.7977.82 on Linux advertise
+// server_padding and this larger root-store snapshot. Measured with fresh
+// headed agent-browser profiles at https://tls.peet.ws/api/all.
+const chrome152CfTTrustAnchorsCapture = "00cc04d679090804d67909020582df13020e04d679090e08839a648c9b2d011308839a648c9b2d010708839a648c9b2d010d04d67909090582df13020d04d679090608839a648c9b2d010c0582df1302130582df13020604d679090404d679090f0582df13020f04d679090a04d67909070582df13021204d67909050582df13020104d679090b0582df13021408839a648c9b2d010804d679090c08839a648c9b2d010a08839a648c9b2d010904d679090308839a648c9b2d010b04d679090104d679090d08839a648c9b2d0112"
+
+var chrome152CfTTrustAnchors = shuffledTrustAnchors(chrome152CfTTrustAnchorsCapture)
+
 var customTransportProfiles = map[string]profiles.ClientProfile{
-	"chrome_152": newChrome152Profile(),
+	"chrome_152":     newChrome152Profile(false),
+	"chrome_152_cft": newChrome152Profile(true),
 }
 
-func newChrome152Profile() profiles.ClientProfile {
+func newChrome152Profile(forTesting bool) profiles.ClientProfile {
+	trustAnchors := chrome152TrustAnchors
+	if forTesting {
+		trustAnchors = chrome152CfTTrustAnchors
+	}
 	clientHelloID := tls.ClientHelloID{
 		Client:               "Chrome",
 		RandomExtensionOrder: false,
 		Version:              "152",
 		Seed:                 nil,
 		SpecFactory: func() (tls.ClientHelloSpec, error) {
-			return tls.ClientHelloSpec{
+			spec := tls.ClientHelloSpec{
 				CipherSuites: []uint16{
 					tls.GREASE_PLACEHOLDER,
 					tls.TLS_AES_128_GCM_SHA256,
@@ -94,10 +106,19 @@ func newChrome152Profile() profiles.ClientProfile {
 					tls.BoringGREASEECH(),
 					&tls.ALPNExtension{AlpnProtocols: []string{"h2", "http/1.1"}},
 					&tls.PSKKeyExchangeModesExtension{Modes: []uint8{tls.PskModeDHE}},
-					&tls.GenericExtension{Id: 0xca34, Data: chrome152TrustAnchors},
+					&tls.GenericExtension{Id: 0xca34, Data: trustAnchors},
 					&tls.UtlsGREASEExtension{},
 				},
-			}, nil
+			}
+			if forTesting {
+				// BoringSSL's server_padding extension requests a minimum of zero
+				// padding bytes. Keep the terminal GREASE extension at the end.
+				spec.Extensions = append(spec.Extensions[:len(spec.Extensions)-1],
+					&tls.GenericExtension{Id: 4832, Data: []byte{0, 0}},
+					&tls.UtlsGREASEExtension{},
+				)
+			}
+			return spec, nil
 		},
 	}
 
