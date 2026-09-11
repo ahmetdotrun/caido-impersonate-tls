@@ -120,7 +120,8 @@ func TestForwardPreservesGeneratedHeaderPositions(t *testing.T) {
 			{Name: "Content-Length", Value: "4"},
 			{Name: "X-Second", Value: "two"},
 		},
-		Body: []byte("body"),
+		Body:       strings.NewReader("body"),
+		BodyLength: 4,
 	}
 	metadata := routeMetadata{
 		Scheme:  "http",

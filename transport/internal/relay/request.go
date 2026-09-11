@@ -14,7 +14,6 @@ import (
 const (
 	maxRequestLineBytes = 16 * 1024
 	maxHeaderBytes      = 256 * 1024
-	maxBodyBytes        = 64 * 1024 * 1024
 )
 
 const (
@@ -24,6 +23,7 @@ const (
 	headerPort    = "X-Caido-Impersonate-Port"
 	headerProfile = "X-Caido-Impersonate-Profile"
 	headerTrace   = "X-Caido-Impersonate-Trace"
+	headerMaxBody = "X-Caido-Impersonate-Max-Body-Bytes"
 )
 
 type header struct {
@@ -36,7 +36,8 @@ type incomingRequest struct {
 	RequestURI string
 	Protocol   string
 	Headers    []header
-	Body       []byte
+	Body       io.Reader
+	BodyLength int64
 }
 
 type routeMetadata struct {
@@ -53,7 +54,7 @@ func readIncomingRequest(reader *bufio.Reader) (*incomingRequest, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := request.readBody(reader); err != nil {
+	if err := request.prepareBody(reader); err != nil {
 		return nil, err
 	}
 	return request, nil
@@ -119,7 +120,9 @@ func readIncomingHead(reader *bufio.Reader) (*incomingRequest, error) {
 	return request, nil
 }
 
-func (request *incomingRequest) readBody(reader *bufio.Reader) error {
+// prepareBody validates framing without consuming the upload. The HTTP client
+// pulls bytes only as it can forward them, keeping memory independent of size.
+func (request *incomingRequest) prepareBody(reader *bufio.Reader) error {
 	contentLength, hasContentLength, err := request.contentLength()
 	if err != nil {
 		return err
@@ -136,19 +139,30 @@ func (request *incomingRequest) readBody(reader *bufio.Reader) error {
 	if chunked && hasContentLength {
 		return errors.New("both Transfer-Encoding and Content-Length are present")
 	}
+	var maximum int64
+	if values := request.headerValues(headerMaxBody); len(values) > 0 {
+		if len(values) != 1 {
+			return errors.New("multiple upload limit values")
+		}
+		maximum, err = strconv.ParseInt(values[0], 10, 64)
+		if err != nil || maximum < 0 {
+			return errors.New("invalid upload limit")
+		}
+	}
 
 	switch {
 	case chunked:
-		request.Body, err = readLimitedBody(httputil.NewChunkedReader(reader))
+		request.Body = httputil.NewChunkedReader(reader)
+		request.BodyLength = -1
 	case hasContentLength && contentLength > 0:
-		if contentLength > maxBodyBytes {
-			return errors.New("request body exceeds limit")
+		if maximum > 0 && contentLength > maximum {
+			return errBodyTooLarge
 		}
-		request.Body = make([]byte, contentLength)
-		_, err = io.ReadFull(reader, request.Body)
+		request.Body = &exactBodyReader{reader: reader, remaining: contentLength}
+		request.BodyLength = contentLength
 	}
-	if err != nil {
-		return fmt.Errorf("request body: %w", err)
+	if request.Body != nil && maximum > 0 {
+		request.Body = &limitedBodyReader{reader: request.Body, remaining: maximum}
 	}
 
 	return nil
@@ -312,16 +326,54 @@ func readLimitedLine(reader *bufio.Reader, limit int) (string, error) {
 	}
 }
 
-func readLimitedBody(reader io.Reader) ([]byte, error) {
-	limited := io.LimitReader(reader, maxBodyBytes+1)
-	body, err := io.ReadAll(limited)
-	if err != nil {
-		return nil, err
+var errBodyTooLarge = errors.New("request body exceeds configured upload limit")
+
+type exactBodyReader struct {
+	reader    io.Reader
+	remaining int64
+}
+
+func (reader *exactBodyReader) Read(buffer []byte) (int, error) {
+	if len(buffer) == 0 {
+		return 0, nil
 	}
-	if len(body) > maxBodyBytes {
-		return nil, errors.New("request body exceeds limit")
+	if reader.remaining == 0 {
+		return 0, io.EOF
 	}
-	return body, nil
+	if int64(len(buffer)) > reader.remaining {
+		buffer = buffer[:reader.remaining]
+	}
+	n, err := reader.reader.Read(buffer)
+	reader.remaining -= int64(n)
+	if err == io.EOF && reader.remaining > 0 {
+		err = io.ErrUnexpectedEOF
+	}
+	return n, err
+}
+
+type limitedBodyReader struct {
+	reader    io.Reader
+	remaining int64
+}
+
+func (reader *limitedBodyReader) Read(buffer []byte) (int, error) {
+	if len(buffer) == 0 {
+		return 0, nil
+	}
+	if reader.remaining == 0 {
+		var probe [1]byte
+		n, err := reader.reader.Read(probe[:])
+		if n > 0 {
+			return 0, errBodyTooLarge
+		}
+		return 0, err
+	}
+	if int64(len(buffer)) > reader.remaining {
+		buffer = buffer[:reader.remaining]
+	}
+	n, err := reader.reader.Read(buffer)
+	reader.remaining -= int64(n)
+	return n, err
 }
 
 func validToken(value string) bool {

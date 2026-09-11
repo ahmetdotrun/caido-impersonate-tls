@@ -2,8 +2,10 @@ package relay
 
 import (
 	"fmt"
+	"net"
 	"strings"
 	"sync"
+	"time"
 
 	tls_client "github.com/bogdanfinn/tls-client"
 	"github.com/bogdanfinn/tls-client/profiles"
@@ -50,16 +52,13 @@ func (pool *clientPool) getForProtocol(profileName string, forceHTTP1 bool) (tls
 		}
 	}
 
-	timeoutSeconds := 60
-	if forceHTTP1 {
-		// A WebSocket can legitimately remain open for the lifetime of a page.
-		// The private relay connection owns the handshake deadline instead.
-		timeoutSeconds = 0
-	}
 	options := []tls_client.HttpClientOption{
 		tls_client.WithClientProfile(profile),
 		tls_client.WithNotFollowRedirects(),
-		tls_client.WithTimeoutSeconds(timeoutSeconds),
+		// The relay owns header and inactivity deadlines. A whole-response
+		// timeout would truncate healthy streams and slow downloads.
+		tls_client.WithTimeoutSeconds(0),
+		tls_client.WithDialer(net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}),
 		tls_client.WithTransportOptions(&tls_client.TransportOptions{
 			DisableCompression:     true,
 			MaxIdleConns:           128,

@@ -21,6 +21,7 @@ export type Settings = {
   autoStart: boolean;
   defaultProfile: string;
   headerMode: HeaderMode;
+  maximumUploadMiB: number;
 };
 
 export type Profile = {

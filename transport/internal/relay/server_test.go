@@ -51,7 +51,7 @@ func TestServerAuthenticatesBeforeReadingBody(t *testing.T) {
 		fmt.Sprintf("%s: 80", headerPort),
 		fmt.Sprintf("%s: chrome_146", headerProfile),
 		fmt.Sprintf("%s: test-1", headerTrace),
-		fmt.Sprintf("Content-Length: %d", maxBodyBytes),
+		"Content-Length: 67108864",
 		"",
 		"",
 	}, "\r\n")

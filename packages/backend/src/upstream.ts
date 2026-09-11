@@ -12,6 +12,7 @@ const INTERNAL_HEADERS = {
   port: "X-Caido-Impersonate-Port",
   profile: "X-Caido-Impersonate-Profile",
   trace: "X-Caido-Impersonate-Trace",
+  maxBody: "X-Caido-Impersonate-Max-Body-Bytes",
 } as const;
 
 export function createUpstreamHandler(
@@ -60,6 +61,10 @@ export function createUpstreamHandler(
     spec.setHeader(INTERNAL_HEADERS.port, String(port));
     spec.setHeader(INTERNAL_HEADERS.profile, settings.defaultProfile);
     spec.setHeader(INTERNAL_HEADERS.trace, entry.id);
+    spec.setHeader(
+      INTERNAL_HEADERS.maxBody,
+      String(settings.maximumUploadMiB * 1024 * 1024),
+    );
 
     try {
       const connection = await sdk.net.connect(

@@ -48,6 +48,18 @@ async function updateSettings(
     };
   }
 
+  if (
+    Number.isSafeInteger(settings.maximumUploadMiB) === false ||
+    settings.maximumUploadMiB < 0 ||
+    settings.maximumUploadMiB > 1_048_576
+  ) {
+    return {
+      kind: "Error",
+      error:
+        "Upload limit must be a whole number from 0 to 1048576 MiB (0 means unlimited)",
+    };
+  }
+
   try {
     const saved = await settingsStore.save(sdk, settings);
     if (settings.enabled && settings.autoStart && transport !== undefined) {

@@ -2,6 +2,7 @@
 import Button from "primevue/button";
 import Card from "primevue/card";
 import Divider from "primevue/divider";
+import InputNumber from "primevue/inputnumber";
 import Message from "primevue/message";
 import Select from "primevue/select";
 import Tab from "primevue/tab";
@@ -26,6 +27,7 @@ const status = ref<TransportStatus>();
 const enabled = ref(false);
 const autoStart = ref(false);
 const defaultProfile = ref<string>();
+const maximumUploadMiB = ref<number>(0);
 const loading = ref(true);
 const saving = ref(false);
 const action = ref<"start" | "stop">();
@@ -43,6 +45,7 @@ function applySettings(value: Settings): void {
   enabled.value = value.enabled;
   autoStart.value = value.autoStart;
   defaultProfile.value = value.defaultProfile;
+  maximumUploadMiB.value = value.maximumUploadMiB;
 }
 
 function applyStatus(value: TransportStatus): void {
@@ -150,6 +153,7 @@ async function save(): Promise<void> {
         autoStart: autoStart.value,
         defaultProfile: defaultProfile.value,
         headerMode: "preserve",
+        maximumUploadMiB: maximumUploadMiB.value ?? 0,
       }),
     );
     applySettings(updated);
@@ -251,6 +255,30 @@ onMounted(() => void load());
                         :disabled="!canStop"
                         :loading="action === 'stop'"
                         @click="stopTransport"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="flex items-center gap-4">
+                    <div class="flex-1 min-w-0">
+                      <label class="text-sm font-medium" for="upload-limit">
+                        Maximum upload (MiB)
+                      </label>
+                      <p class="text-sm text-surface-400">
+                        Use 0 for no plugin size limit. The relay streams
+                        uploads; Caido may buffer independently. Changes apply
+                        to new requests without restarting.
+                      </p>
+                    </div>
+                    <div class="w-56 shrink-0">
+                      <InputNumber
+                        v-model="maximumUploadMiB"
+                        input-id="upload-limit"
+                        :min="0"
+                        :max="1048576"
+                        :max-fraction-digits="0"
+                        :disabled="loading"
+                        class="w-full"
                       />
                     </div>
                   </div>

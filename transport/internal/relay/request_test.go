@@ -2,6 +2,7 @@ package relay
 
 import (
 	"bufio"
+	"io"
 	"strings"
 	"testing"
 )
@@ -20,8 +21,9 @@ func TestReadIncomingRequestPreservesHeaderOrder(t *testing.T) {
 	if request.Method != "POST" || request.RequestURI != "/submit?q=1" {
 		t.Fatalf("unexpected request line: %#v", request)
 	}
-	if string(request.Body) != "body" {
-		t.Fatalf("body = %q", request.Body)
+	body, err := io.ReadAll(request.Body)
+	if err != nil || string(body) != "body" {
+		t.Fatalf("body = %q, error = %v", body, err)
 	}
 	if len(request.Headers) != 4 {
 		t.Fatalf("headers = %#v", request.Headers)

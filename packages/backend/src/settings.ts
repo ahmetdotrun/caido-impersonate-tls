@@ -13,6 +13,7 @@ const DEFAULT_SETTINGS: Settings = {
   autoStart: true,
   defaultProfile: "chrome_152",
   headerMode: "preserve",
+  maximumUploadMiB: 0,
 };
 
 export class SettingsStore {
@@ -75,7 +76,11 @@ export class SettingsStore {
       typeof candidate.autoStart !== "boolean" ||
       typeof candidate.defaultProfile !== "string" ||
       isKnownProfile(candidate.defaultProfile) === false ||
-      candidate.headerMode !== "preserve"
+      candidate.headerMode !== "preserve" ||
+      (candidate.maximumUploadMiB !== undefined &&
+        (Number.isSafeInteger(candidate.maximumUploadMiB) === false ||
+          candidate.maximumUploadMiB < 0 ||
+          candidate.maximumUploadMiB > 1_048_576))
     ) {
       throw new Error("Settings file contains invalid values");
     }
@@ -85,6 +90,7 @@ export class SettingsStore {
       autoStart: candidate.autoStart,
       defaultProfile: candidate.defaultProfile,
       headerMode: candidate.headerMode,
+      maximumUploadMiB: candidate.maximumUploadMiB ?? 0,
     };
   }
 }

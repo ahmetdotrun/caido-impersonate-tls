@@ -25,10 +25,8 @@ func writeResponse(writer io.Writer, method string, response *fhttp.Response) er
 
 	for name, values := range response.Header {
 		lowerName := strings.ToLower(name)
-		if lowerName == "connection" ||
-			lowerName == "content-length" ||
-			lowerName == "transfer-encoding" ||
-			lowerName == "trailer" {
+		_, hop := fixedHopHeaders[lowerName]
+		if hop || lowerName == "content-length" || responseConnectionHeader(response, lowerName) {
 			continue
 		}
 		for _, value := range values {
@@ -44,7 +42,7 @@ func writeResponse(writer io.Writer, method string, response *fhttp.Response) er
 		response.StatusCode != http.StatusNotModified
 
 	if !hasBody {
-		if response.ContentLength >= 0 {
+		if response.ContentLength >= 0 && response.StatusCode != http.StatusNoContent {
 			if _, err := fmt.Fprintf(buffered, "Content-Length: %d\r\n", response.ContentLength); err != nil {
 				return err
 			}
@@ -67,7 +65,7 @@ func writeResponse(writer io.Writer, method string, response *fhttp.Response) er
 		if err := buffered.Flush(); err != nil {
 			return err
 		}
-		_, err := io.Copy(writer, response.Body)
+		_, err := io.CopyN(writer, response.Body, response.ContentLength)
 		return err
 	}
 
@@ -83,11 +81,10 @@ func writeResponse(writer io.Writer, method string, response *fhttp.Response) er
 
 	chunked := httputil.NewChunkedWriter(writer)
 	_, copyErr := io.Copy(chunked, response.Body)
-	closeErr := chunked.Close()
 	if copyErr != nil {
 		return copyErr
 	}
-	if closeErr != nil {
+	if closeErr := chunked.Close(); closeErr != nil {
 		return closeErr
 	}
 	_, err := io.WriteString(writer, "\r\n")
@@ -135,4 +132,15 @@ func writeError(writer io.Writer, statusCode int, message string) {
 		len(body),
 		body,
 	)
+}
+
+func responseConnectionHeader(response *fhttp.Response, name string) bool {
+	for _, value := range response.Header.Values("Connection") {
+		for _, nominated := range strings.Split(value, ",") {
+			if strings.EqualFold(strings.TrimSpace(nominated), name) {
+				return true
+			}
+		}
+	}
+	return false
 }

@@ -1,7 +1,7 @@
 package relay
 
 import (
-	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -18,6 +18,7 @@ var internalHeaderNames = map[string]struct{}{
 	strings.ToLower(headerPort):    {},
 	strings.ToLower(headerProfile): {},
 	strings.ToLower(headerTrace):   {},
+	strings.ToLower(headerMaxBody): {},
 }
 
 var fixedHopHeaders = map[string]struct{}{
@@ -33,6 +34,10 @@ var fixedHopHeaders = map[string]struct{}{
 }
 
 func forward(pool *clientPool, request *incomingRequest, metadata routeMetadata) (*fhttp.Response, error) {
+	return forwardContext(context.Background(), pool, request, metadata)
+}
+
+func forwardContext(ctx context.Context, pool *clientPool, request *incomingRequest, metadata routeMetadata) (*fhttp.Response, error) {
 	path, err := request.targetPath()
 	if err != nil {
 		return nil, errors.New("invalid request target")
@@ -40,10 +45,11 @@ func forward(pool *clientPool, request *incomingRequest, metadata routeMetadata)
 
 	authority := net.JoinHostPort(metadata.Host, metadata.Port)
 	targetURL := fmt.Sprintf("%s://%s%s", metadata.Scheme, authority, path)
-	upstream, err := fhttp.NewRequest(
+	upstream, err := fhttp.NewRequestWithContext(
+		ctx,
 		request.Method,
 		targetURL,
-		bytes.NewReader(request.Body),
+		request.Body,
 	)
 	if err != nil {
 		return nil, errors.New("create upstream request failed")
@@ -87,7 +93,7 @@ func forward(pool *clientPool, request *incomingRequest, metadata routeMetadata)
 	if upstream.Host == "" {
 		upstream.Host = authority
 	}
-	upstream.ContentLength = int64(len(request.Body))
+	upstream.ContentLength = request.BodyLength
 	upstream.Close = false
 	if len(headerOrder) > 0 {
 		upstream.Header[fhttp.HeaderOrderKey] = headerOrder
