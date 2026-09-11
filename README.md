@@ -24,7 +24,7 @@ Caido Proxy / Replay / Automate / workflow
 
 The backend starts the transport on an ephemeral loopback port and passes a random 256-bit token through a one-time owner-only file. An ownership heartbeat stops orphaned processes after plugin unload. The transport authenticates requests before opening a target connection, strips every internal header, rejects CONNECT, verifies target certificates, and fails closed when unavailable.
 
-Before execution, the backend verifies the bundled binary against its packaged SHA-256 checksum and copies it to Caido's private plugin directory with owner-only permissions. There is no runtime downloader or updater.
+Before execution, the backend verifies the bundled binary against its packaged SHA-256 checksum and atomically installs it in Caido's private plugin directory with owner-only permissions. Reloading the same version does not overwrite a still-running executable. There is no runtime downloader or updater.
 
 This design does not create a Caido HTTP/SOCKS proxy, expose a general proxy endpoint, or require a separately managed process.
 

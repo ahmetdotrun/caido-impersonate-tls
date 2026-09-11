@@ -1,6 +1,14 @@
 import { type ChildProcess, spawn } from "child_process";
 import { createHash, randomBytes } from "crypto";
-import { chmod, mkdir, open, readFile, rm, writeFile } from "fs/promises";
+import {
+  chmod,
+  mkdir,
+  open,
+  readFile,
+  rename,
+  rm,
+  writeFile,
+} from "fs/promises";
 import os from "os";
 import path from "path";
 
@@ -196,9 +204,17 @@ export class TransportService {
     const installedPath = path.join(installDirectory, filename);
 
     await mkdir(installDirectory, { recursive: true });
-    await writeFile(installedPath, binary, { mode: 0o700 });
-    if (os.platform() !== "win32") {
-      await chmod(installedPath, 0o700);
+    // A previous plugin instance can still be exiting after a reload. Replace
+    // the inode atomically instead of trying to overwrite its running binary.
+    const pendingPath = `${installedPath}.${randomBytes(16).toString("hex")}.tmp`;
+    try {
+      await this.writeExclusive(pendingPath, binary);
+      if (os.platform() !== "win32") {
+        await chmod(pendingPath, 0o700);
+      }
+      await rename(pendingPath, installedPath);
+    } finally {
+      await rm(pendingPath, { force: true });
     }
 
     return installedPath;
@@ -229,7 +245,10 @@ export class TransportService {
     return { tokenPath, ownerPath };
   }
 
-  private async writeExclusive(filePath: string, data: string): Promise<void> {
+  private async writeExclusive(
+    filePath: string,
+    data: string | QuickJS.ArrayBufferView,
+  ): Promise<void> {
     const file = await open(filePath, "wx", 0o600);
     try {
       await file.writeFile(data);
