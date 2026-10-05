@@ -113,3 +113,50 @@ func TestResponseDoesNotTerminateFailedChunkedStream(t *testing.T) {
 		t.Fatal("downstream could not detect the truncated stream")
 	}
 }
+
+func TestResponsePreservesBodylessRepresentationLength(t *testing.T) {
+	for _, test := range []struct {
+		name, method, status, length string
+	}{
+		{"head without length", "HEAD", "200 OK", ""},
+		{"head with length", "HEAD", "200 OK", "42"},
+		{"head with zero length", "HEAD", "200 OK", "0"},
+		{"not modified without length", "GET", "304 Not Modified", ""},
+		{"not modified with length", "GET", "304 Not Modified", "42"},
+		{"not modified with zero length", "GET", "304 Not Modified", "0"},
+		{"head not modified", "HEAD", "304 Not Modified", "42"},
+		{"no content", "GET", "204 No Content", ""},
+		{"early hints", "GET", "103 Early Hints", ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			raw := "HTTP/1.1 " + test.status + "\r\nETag: \"fixture\"\r\n"
+			if test.length != "" {
+				raw += "Content-Length: " + test.length + "\r\n"
+			}
+			raw += "\r\n"
+			response, err := fhttp.ReadResponse(bufio.NewReader(strings.NewReader(raw)), &fhttp.Request{Method: test.method})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var wire bytes.Buffer
+			if err := writeResponse(&wire, test.method, response); err != nil {
+				t.Fatal(err)
+			}
+			parsed, err := http.ReadResponse(bufio.NewReader(&wire), &http.Request{Method: test.method})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer parsed.Body.Close()
+			if got := parsed.Header.Get("Content-Length"); got != test.length {
+				t.Fatalf("Content-Length = %q, want %q", got, test.length)
+			}
+			if parsed.Header.Get("ETag") != "\"fixture\"" {
+				t.Fatal("cache validator was lost")
+			}
+			body, err := io.ReadAll(parsed.Body)
+			if err != nil || len(body) != 0 {
+				t.Fatalf("bodyless response has body %q: %v", body, err)
+			}
+		})
+	}
+}

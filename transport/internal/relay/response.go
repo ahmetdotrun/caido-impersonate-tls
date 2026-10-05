@@ -42,9 +42,15 @@ func writeResponse(writer io.Writer, method string, response *fhttp.Response) er
 		response.StatusCode != http.StatusNotModified
 
 	if !hasBody {
-		if response.ContentLength >= 0 && response.StatusCode != http.StatusNoContent {
-			if _, err := fmt.Fprintf(buffered, "Content-Length: %d\r\n", response.ContentLength); err != nil {
-				return err
+		// HEAD and 304 can describe the representation's size, not the empty
+		// response body. Preserve the declared value rather than deriving zero
+		// from the transport's body length; 1xx and 204 must not send it at all.
+		if response.StatusCode >= 200 && response.StatusCode != http.StatusNoContent &&
+			!responseConnectionHeader(response, "content-length") {
+			if length := response.Header.Get("Content-Length"); length != "" {
+				if _, err := fmt.Fprintf(buffered, "Content-Length: %s\r\n", length); err != nil {
+					return err
+				}
 			}
 		}
 		_, err := io.WriteString(buffered, "Connection: close\r\n\r\n")
