@@ -32,7 +32,9 @@ docker volume create --label "$label" "$volume" >/dev/null
 docker run --rm --network none --user root --cap-drop ALL --cap-add CHOWN \
   --security-opt no-new-privileges --mount "type=volume,src=$volume,dst=/test-data" \
   --entrypoint sh "$caido_image" -c 'chown caido:caido /test-data'
+# BuildKit can export directories with mode 0700; use the caller's UID.
 docker run --detach --name "$fixture" --label "$label" --network none \
+  --user "$(id -u):$(id -g)" \
   --cap-drop ALL --security-opt no-new-privileges \
   --mount "type=bind,src=$artifacts,dst=/artifacts,readonly" "$fixture_image" >/dev/null
 # The fixture owns the network namespace so its origin survives Caido restarts.
