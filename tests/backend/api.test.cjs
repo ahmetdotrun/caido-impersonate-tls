@@ -42,3 +42,69 @@ test("settings API reports startup failure after persisting settings and can rep
   assert.equal(handlers.getStatus(sdk).value.state, "error");
   await handlers.stopTransport(sdk);
 });
+
+test("helper readiness, shaping enablement and Activity remain distinct through the API", async (t) => {
+  const { sdk, directory } = await sandbox(t);
+  const handlers = {};
+  let upstream;
+  sdk.api.register = (name, handler) => {
+    handlers[name] = handler;
+  };
+  sdk.events = {
+    onUpstream(handler) {
+      upstream = handler;
+    },
+  };
+  sdk.net = { connect: async () => ({}) };
+  const settings = {
+    enabled: false,
+    autoStart: false,
+    defaultProfile: "chrome_157_cft_PSK",
+    headerMode: "preserve",
+    maximumUploadMiB: 128,
+  };
+  await writeFile(
+    path.join(directory, "settings.json"),
+    JSON.stringify(settings),
+  );
+  await init(sdk);
+  t.after(() => handlers.stopTransport(sdk));
+  assert.equal((await handlers.startTransport(sdk)).value.state, "running");
+  const headers = new Map();
+  const spec = {
+    getMethod: () => "GET",
+    setHeader: (name, value) => headers.set(name, value),
+  };
+  const request = {
+    getTls: () => true,
+    getHost: () => "fixture.test",
+    getPort: () => 443,
+    toSpec: () => spec,
+  };
+  assert.equal(await upstream(sdk, request), undefined);
+  assert.deepEqual(handlers.getActivity(sdk), { kind: "Ok", value: [] });
+
+  const configured = await handlers.updateSettings(sdk, {
+    ...settings,
+    enabled: true,
+    autoStart: true,
+  });
+  assert.equal(configured.kind, "Ok");
+  assert.equal(configured.value.maximumUploadMiB, 128);
+  await upstream(sdk, request);
+  await upstream(sdk, request);
+  assert.equal(
+    headers.get("X-Caido-Impersonate-Profile"),
+    settings.defaultProfile,
+  );
+  const activity = handlers.getActivity(sdk);
+  assert.equal(activity.kind, "Ok");
+  assert.equal(activity.value.length, 2);
+  assert(activity.value.every((entry) => entry.state === "routed"));
+  activity.value[0].state = "failed";
+  assert.equal(handlers.getActivity(sdk).value[0].state, "routed");
+  await handlers.stopTransport(sdk);
+  assert(
+    handlers.getActivity(sdk).value.every((entry) => entry.state === "interrupted"),
+  );
+});

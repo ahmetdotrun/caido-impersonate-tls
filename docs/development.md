@@ -45,6 +45,8 @@ The CLI wraps the plugin's return under `result`. Check `.result.kind` for `Ok`,
 
 Activity is memory-only and can be cleared or lost on plugin reload. Verify TLS shaping at a controlled destination; an Activity count alone does not establish which fingerprint arrived there.
 
+Caido's plugin inventory reports whether the backend is running. Check the helper separately with `getStatus`, and check `getSettings().value.enabled` before expecting shaped requests. Starting the helper does not enable shaping. When configuring through `updateSettings`, preserve existing fields such as the upload limit.
+
 ## Caido browser regression harness
 
 [scripts/browser-compat.mjs](../scripts/browser-compat.mjs) exercises a separately prepared, disposable agent-browser engagement runtime through Caido. It needs the pinned upstream CLI, a dashboard, persistent browser storage, and trust for Caido's CA. The browser comparison image above does not provide that engagement runtime.
