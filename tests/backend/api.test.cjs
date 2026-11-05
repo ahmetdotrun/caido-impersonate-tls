@@ -105,6 +105,45 @@ test("helper readiness, shaping enablement and Activity remain distinct through 
   assert.equal(handlers.getActivity(sdk).value[0].state, "routed");
   await handlers.stopTransport(sdk);
   assert(
-    handlers.getActivity(sdk).value.every((entry) => entry.state === "interrupted"),
+    handlers
+      .getActivity(sdk)
+      .value.every((entry) => entry.state === "interrupted"),
   );
+});
+
+test("rule refresh runs after hook registration and exposes failures beside helper status", async (t) => {
+  const { sdk, directory } = await sandbox(t);
+  const handlers = {};
+  let hookRegistered = false;
+  sdk.api.register = (name, handler) => {
+    handlers[name] = handler;
+  };
+  sdk.events = {
+    onUpstream() {
+      hookRegistered = true;
+    },
+  };
+  sdk.graphql.execute = async () => {
+    assert.equal(hookRegistered, true);
+    throw new Error("upstream API unavailable");
+  };
+  await writeFile(
+    path.join(directory, "settings.json"),
+    JSON.stringify({
+      enabled: false,
+      autoStart: false,
+      defaultProfile: "chrome_157_cft_PSK",
+      headerMode: "preserve",
+      maximumUploadMiB: 128,
+    }),
+  );
+  await init(sdk);
+  t.after(() => handlers.stopTransport(sdk));
+  const status = (await handlers.startTransport(sdk)).value;
+  assert.equal(status.state, "running");
+  assert.match(
+    status.routingError,
+    /re-save the rule.*upstream API unavailable/,
+  );
+  assert.equal(handlers.getStatus(sdk).value.routingError, status.routingError);
 });

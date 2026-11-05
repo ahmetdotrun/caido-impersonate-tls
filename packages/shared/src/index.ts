@@ -16,6 +16,7 @@ export type TransportStatus = {
   platform: string;
   port?: number;
   error?: string;
+  routingError?: string;
 };
 
 export type HeaderMode = "preserve" | "fill" | "enforce";

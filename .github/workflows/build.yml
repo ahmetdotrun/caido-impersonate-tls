@@ -47,6 +47,12 @@ jobs:
           unzip -t plugin_package.zip
           sha256sum plugin_package.zip > plugin_package.zip.sha256
 
+      - name: Build isolated Caido restart fixture
+        run: docker build -f tests/caido/Dockerfile -t impersonate-tls-caido-test .
+
+      - name: Verify persisted upstream rules after Caido restarts
+        run: tests/caido/restart.sh dist
+
       - name: Upload plugin package
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

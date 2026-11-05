@@ -32,6 +32,16 @@ When those headers are present, Activity can warn about disagreements in browser
 
 ## Observed Caido behavior
 
+### Persisted upstream rules after restart
+
+Caido **0.59.0** loads saved upstream rules before starting backend plugins. In a persistent Docker instance with the released v0.3.0 plugin, a rule with include `*` and exclude `localhost` remained enabled after restart but stopped invoking the plugin. The helper reported running while the controlled origin received Caido's ClientHello: 31 ciphers and no GREASE. Re-saving the rule restored the selected Chrome profile: 16 ciphers, GREASE, and HTTP/2.
+
+The current source works around this startup ordering issue through the supported backend GraphQL SDK. After registering its upstream hook, it reasserts `enabled: true` once for each of its already-enabled rules. It does not toggle them off, create rules, or write filters or rank. Disabled rules and other plugins' rules are skipped. This also runs when shaping or automatic helper startup is disabled, so enabling shaping later uses a valid binding.
+
+If refreshing fails, the backend logs the error and the plugin UI displays a warning alongside helper status. Re-save the rule in **Network → Upstream**, or reload the plugin to retry. A running helper alone does not prove that Caido is routing traffic through it. Verify a controlled destination and Activity before relying on the profile.
+
+The persistent restart regression checks destination ClientHello and HTTP/2, completed Activity, preserved filters and rank, and disabled/excluded traffic. The issue was reproduced with the old ZIP and repaired by the startup refresh; this is a plugin workaround, not a change to Caido's startup order.
+
 ### Browser-facing protocol and Priority
 
 In isolated Caido **0.59.0** checks, Chrome 157 negotiated HTTP/1.1 with Caido using both network stacks. Its requests omitted the `Priority` header sent on direct HTTP/2 navigation. The destination TLS and HTTP/2 settings and remaining ordered headers matched the direct capture.

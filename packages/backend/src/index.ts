@@ -10,6 +10,7 @@ import type {
 
 import { ActivityStore } from "./activity";
 import { isKnownProfile, PROFILES } from "./profiles";
+import { refreshUpstreamRules } from "./routing";
 import { SettingsStore } from "./settings";
 import { TransportService } from "./transport";
 import type { BackendSDK } from "./types";
@@ -153,6 +154,14 @@ export async function init(sdk: SDK<Spec>): Promise<void> {
   sdk.events.onUpstream(
     createUpstreamHandler(transport, () => settingsStore.get(), activityStore),
   );
+
+  try {
+    await refreshUpstreamRules(backendSDK);
+  } catch (error) {
+    const message = `Upstream rule refresh failed; re-save the rule in Caido Network settings: ${String(error)}`;
+    transport.setRoutingError(message);
+    sdk.console.error(`[Impersonate TLS] ${message}`);
+  }
 
   try {
     await settingsStore.load(backendSDK);

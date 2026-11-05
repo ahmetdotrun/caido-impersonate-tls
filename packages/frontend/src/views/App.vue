@@ -69,7 +69,7 @@ const selectedProfile = computed(() =>
 const statusSeverity = computed(() => {
   switch (status.value?.state) {
     case "running":
-      return "success";
+      return status.value.routingError === undefined ? "success" : "warn";
     case "error":
     case "unsupported":
       return "danger";
@@ -281,6 +281,14 @@ onMounted(() => void load());
                     Review these replacement settings, then save to repair the
                     file. Shaping and automatic startup are disabled in this
                     draft.
+                  </Message>
+
+                  <Message
+                    v-if="status?.routingError !== undefined"
+                    severity="warn"
+                    :closable="false"
+                  >
+                    {{ status.routingError }}
                   </Message>
 
                   <div class="flex items-center gap-4">

@@ -35,6 +35,19 @@ This fixture checks the relay directly. It does not configure or certify a Caido
 
 To check an extracted packaged helper inside the browser test container, set `TRANSPORT_BIN` to its executable path before running `tests/browser/run.sh`.
 
+## Check persisted Caido rules after restart
+
+Build the plugin ZIP first, then run:
+
+```sh
+docker build -f tests/caido/Dockerfile -t impersonate-tls-caido-test .
+tests/caido/restart.sh dist
+```
+
+The shell script only orchestrates Docker; all test code runs inside containers. It starts digest-pinned Caido 0.59.0 with an owned persistent volume and a local diagnostic origin in an isolated network namespace. No ports are published. A temporary guest session installs the ZIP and configures test rules; generated public CAs verify both TLS connections. The containers and volume are removed on exit.
+
+The test verifies destination ClientHello, HTTP/2, Activity, filters, rank, excluded `localhost`, disabled rules, and disabled shaping across real Caido process restarts. It fails against the released v0.3.0 ZIP at the first restart. CI runs it against the newly built ZIP before uploading the package. Pass another artifact directory as the argument to test a candidate without replacing `dist/`.
+
 ## Read Activity through caido-client
 
 ```sh
@@ -78,6 +91,7 @@ The harness deliberately fails when Caido buffers streams or does not propagate 
 | `transport/internal/relay/catalog.json` | Shared profile registry and plugin/dependency version metadata. |
 | `tests/backend/` | Backend regression tests. |
 | `tests/browser/` | Browser test image, installer, and pinned versions. |
+| `tests/caido/` | Isolated persistent Caido restart regression. |
 | `scripts/` | Compatibility harnesses and package verification. |
 
 `dist/`, package build directories, `.cache/backend-tests/`, and generated transport assets are build output. Keep them out of commits. The published release ZIP and its checksum are distributed as GitHub release assets.

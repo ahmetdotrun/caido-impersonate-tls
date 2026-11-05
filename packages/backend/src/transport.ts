@@ -79,6 +79,10 @@ export class TransportService {
     return { ...this.status };
   }
 
+  public setRoutingError(error: string): void {
+    this.setStatus({ routingError: error });
+  }
+
   public getConnectionDetails(): { port: number; token: string } | undefined {
     if (
       this.status.state !== "running" ||

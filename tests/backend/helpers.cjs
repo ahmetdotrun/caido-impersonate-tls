@@ -11,10 +11,12 @@ async function sandbox(t) {
     events,
     sdk: {
       meta: {
+        id: () => "impersonate-test-plugin",
         path: () => directory,
         assetsPath: () => path.resolve("assets/transport"),
       },
       api: { send: (...event) => events.push(event) },
+      graphql: { execute: async () => ({ data: { upstreamPlugins: [] } }) },
       console: { log() {}, error() {} },
     },
   };
