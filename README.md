@@ -4,6 +4,21 @@ Apply browser-like TLS and HTTP profiles to selected Caido traffic.
 
 **Linux x86_64 only.**
 
+## How it works
+
+```text
+Caido Proxy / Replay / Automate / Workflows
+                    │ matching Upstream Plugin rule
+                    ▼
+        Impersonate TLS backend plugin
+                    │ authenticated loopback request
+                    ▼
+          bundled native transport
+                    │ selected TLS + HTTP profile
+                    ▼
+                  target
+```
+
 ## Install
 
 1. [Download the latest plugin ZIP](https://github.com/ahmetdotrun/caido-impersonate-tls/releases/latest/download/plugin_package.zip).
