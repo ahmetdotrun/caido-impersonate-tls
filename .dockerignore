@@ -1,6 +1,7 @@
 .git
-node_modules
+**/node_modules
 dist
+packages/*/dist
 .pnpm-store
 .cache
 assets/transport
