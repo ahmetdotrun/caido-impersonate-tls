@@ -35,6 +35,16 @@ This fixture checks the relay directly. It does not configure or certify a Caido
 
 To check an extracted packaged helper inside the browser test container, set `TRANSPORT_BIN` to its executable path before running `tests/browser/run.sh`.
 
+## Read Activity through caido-client
+
+```sh
+caido-client plugin-call impersonate-tls getActivity
+```
+
+The CLI wraps the plugin's return under `result`. Check `.result.kind` for `Ok`, then read entries from `.result.value`. Direct Caido SDK calls return the `Result` object without that CLI wrapper. A missing field or an `Error` result is a failed read; do not substitute an empty list.
+
+Activity is memory-only and can be cleared or lost on plugin reload. Verify TLS shaping at a controlled destination; an Activity count alone does not establish which fingerprint arrived there.
+
 ## Caido browser regression harness
 
 [scripts/browser-compat.mjs](../scripts/browser-compat.mjs) exercises a separately prepared, disposable agent-browser engagement runtime through Caido. It needs the pinned upstream CLI, a dashboard, persistent browser storage, and trust for Caido's CA. The browser comparison image above does not provide that engagement runtime.
