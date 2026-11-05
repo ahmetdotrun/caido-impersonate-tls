@@ -3,7 +3,7 @@ import type { KnipConfig } from "knip";
 const config: KnipConfig = {
   workspaces: {
     ".": {
-      entry: ["caido.config.ts"],
+      entry: ["caido.config.ts", "tests/browser/install.mjs"],
     },
     "packages/shared": {
       project: ["src/**/*.ts"],

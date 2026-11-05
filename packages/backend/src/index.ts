@@ -31,6 +31,9 @@ async function updateSettings(
   sdk: BackendSDK,
   settings: Settings,
 ): Promise<Result<Settings>> {
+  if (typeof settings !== "object" || settings === null) {
+    return { kind: "Error", error: "Settings must be an object" };
+  }
   if (
     typeof settings.enabled !== "boolean" ||
     typeof settings.autoStart !== "boolean"
@@ -66,8 +69,14 @@ async function updateSettings(
 
   try {
     const saved = await settingsStore.save(sdk, settings);
-    if (settings.enabled && settings.autoStart && transport !== undefined) {
-      await transport.start();
+    if (saved.enabled && saved.autoStart && transport !== undefined) {
+      const started = await transport.start();
+      if (started.kind === "Error") {
+        return {
+          kind: "Error",
+          error: `Settings were saved, but the transport could not start: ${started.error}`,
+        };
+      }
     }
     return { kind: "Ok", value: saved };
   } catch (error) {
@@ -126,8 +135,10 @@ export async function init(sdk: SDK<Spec>): Promise<void> {
   const backendSDK: BackendSDK = sdk;
   const activityStore = new ActivityStore(backendSDK);
   activity = activityStore;
-  transport = new TransportService(backendSDK, (event) =>
-    activityStore.complete(event),
+  transport = new TransportService(
+    backendSDK,
+    (event) => activityStore.complete(event),
+    (reason) => activityStore.interruptPending(reason),
   );
 
   sdk.api.register("getSettings", getSettings);

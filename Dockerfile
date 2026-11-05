@@ -44,6 +44,7 @@ RUN --network=none --mount=type=cache,target=/go/pkg/mod set -eu; \
     copy_license github.com/bogdanfinn/tls-client BOGDANFINN_TLS_CLIENT.txt; \
     copy_license github.com/bogdanfinn/utls BOGDANFINN_UTLS.txt; \
     copy_license github.com/bogdanfinn/websocket BOGDANFINN_WEBSOCKET.txt; \
+    copy_license github.com/cloudflare/circl CLOUDFLARE_CIRCL.txt; \
     copy_license github.com/klauspost/compress KLAUSPOST_COMPRESS.txt; \
     copy_license github.com/quic-go/qpack QUIC_GO_QPACK.txt; \
     copy_license github.com/tam7t/hpkp TAM7T_HPKP.txt; \
@@ -75,6 +76,11 @@ RUN --network=none set -eu; \
     kill -TERM "$transport_pid"; \
     wait "$transport_pid"
 
+FROM transport-build AS transport-race
+
+RUN --network=none --mount=type=cache,target=/go/pkg/mod \
+    CGO_ENABLED=1 go test -race ./...
+
 FROM node@sha256:752ea8a2f758c34002a0461bd9f1cee4f9a3c36d48494586f60ffce1fc708e0e AS plugin-deps
 
 ENV COREPACK_HOME=/opt/corepack \
@@ -96,10 +102,10 @@ RUN --mount=type=cache,target=/opt/pnpm/store \
 FROM plugin-deps AS verify
 
 COPY . .
-COPY --from=transport-build \
+COPY --from=transport-race \
   /out/linux-amd64/caido-impersonate-transport \
   /src/assets/transport/linux-amd64/caido-impersonate-transport
-COPY --from=transport-build /out/licenses /src/assets/transport/licenses
+COPY --from=transport-race /out/licenses /src/assets/transport/licenses
 RUN cd /src/assets/transport && \
     sha256sum linux-amd64/caido-impersonate-transport > checksums.sha256
 
@@ -108,6 +114,7 @@ RUN --network=none pnpm test:backend
 RUN --network=none pnpm lint
 RUN --network=none pnpm knip
 RUN --network=none pnpm build
+RUN --network=none pnpm verify:package
 
 FROM scratch AS artifact
 

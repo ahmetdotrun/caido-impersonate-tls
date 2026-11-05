@@ -32,7 +32,7 @@ This design does not create a Caido HTTP/SOCKS proxy, expose a general proxy end
 
 1. Download `plugin_package.zip` from the latest release.
 2. Install the ZIP from Caido's Plugins page.
-3. Open **Impersonate TLS**, confirm that the transport is running, and select the profile measured for your actual browser build. The default **Chrome 152** profile and **Chrome for Testing 152 (Linux)** have different ClientHello extensions despite sharing a major version. The latter matches the Linux Chrome for Testing 152.0.7977.54 and 152.0.7977.82 builds tested with agent-browser; compare the destination-observed TLS and HTTP/2 fingerprints after a browser or profile change.
+3. Open **Impersonate TLS**, confirm that the transport is running, and select the profile measured for your actual browser build. New installations default to **Chrome for Testing 157 (Linux, PSK)**, measured against 157.0.8103.38 with upstream [vercel-labs/agent-browser](https://github.com/vercel-labs/agent-browser) 0.41.2. Existing saved selections are preserved. Profile details distinguish measured builds from upstream snapshots; a matching major version alone does not establish parity.
 4. In **Settings → Upstream Plugins**, add a rule for this plugin. Use `*` to include every domain or a narrower domain pattern for selective routing.
 5. Send requests normally from Proxy, Replay, Automate, or workflows.
 6. Check the **Activity** tab for routing state, profile, response status, protocol, duration, transport errors, and Chrome identity mismatches.
@@ -41,18 +41,19 @@ Activity is memory-only and limited to 250 entries. Paths, queries, headers, bod
 
 ## Current scope
 
-- Local Chrome 152 and Linux Chrome for Testing 152 profiles plus pinned `tls-client` v1.15.1 profiles for Chrome 146/144, Firefox 148/147, Safari iOS 26.0/18.5, and OkHttp 4.10 on Android 13.
+- All 83 named profiles from pinned `tls-client` v1.16.0, including Chrome, Brave, Firefox, Safari, Opera, OkHttp and application-specific snapshots, plus Linux Chrome for Testing 152 and 157 variants: 86 selections in total. Search the selector to find a profile. Legacy snapshots are available for reproducibility; their availability does not establish parity with a current browser.
 - HTTPS negotiates HTTP/2 or HTTP/1.1 through ALPN; plain HTTP uses HTTP/1.1.
-- Chrome profiles permute ClientHello extension order on each new handshake, matching modern Chromium behaviour while keeping their JA4 and HTTP/2 identity stable.
+- Modern Chrome (110+) and Brave profiles permute ClientHello extension order on each new handshake. Older snapshots retain their captured order. Chromium WebSocket clients omit HTTP/2 application settings when negotiating HTTP/1.1.
 - Certificate verification and fail-closed transport behavior.
 - Original request headers and response content encodings preserved where possible.
 - RFC 6455 WebSockets use the selected TLS profile with an HTTP/1.1 Upgrade handshake and a bidirectional tunnel.
 - Uploads and responses stream with bounded relay memory. **Maximum upload (MiB)** defaults to `0` (no plugin size cap); a positive value rejects oversized requests with HTTP 413. Settings saved by earlier versions migrate automatically. Changes apply to new requests without restarting the transport. For chunked uploads, the limit is enforced as bytes arrive, so a rejected upload can have reached the origin partially.
 - Active transfers have no fixed lifetime. Connections have a 30-second dial timeout, requests have a 60-second header wait after the upload is sent, and ordinary transfers have a five-minute inactivity timeout. Closing the Caido-to-relay connection or shutting down the transport cancels upstream work; propagation of a browser disconnect also depends on Caido. Bodyless HTTP requests also release their queue position on disconnect. Queued uploads and WebSocket handshakes retain the bounded queue timeout because monitoring them must not consume unread payload. WebSockets retain their open-ended lifetime.
 - Clients are pooled by origin, profile, and HTTP/WebSocket mode so a stalled TLS handshake cannot block unrelated sites. The pool holds at most 256 clients, evicts only idle clients, and returns HTTP 503 if all are active. Response bodies and WebSockets keep their client lease until close.
-- Settings reads/writes and transport start/stop operations execute in order. Settings are replaced atomically; damaged or unreadable settings remain on disk and produce an explicit error instead of silently changing the profile or enabling the plugin. Save valid settings explicitly to repair them.
+- Settings reads/writes and transport start/stop operations execute in order. Settings are replaced atomically; damaged or unreadable settings remain on disk and block routing. **Prepare replacement settings** creates a disabled draft; review and save it to repair the file. A failed automatic startup is reported separately from a successful settings write.
 - HTTP requests and WebSockets each have 128 active slots. Another 128 requests can wait for up to 10 seconds; overload returns HTTP 503 and is reported in Activity when the request has been authenticated and identified.
 - Private per-request loopback connections.
+- Informational responses, including `100 Continue` and `103 Early Hints`, are forwarded. `OPTIONS *` retains its server-wide target. Stopping or losing the helper marks pending activity as interrupted.
 - Linux x86_64 only.
 
 ## Limitations
@@ -61,11 +62,32 @@ Activity is memory-only and limited to 250 entries. Paths, queries, headers, bod
 - Each Caido-to-plugin connection handles one HTTP request or one WebSocket lifetime.
 - Browser profiles are captured snapshots and may trail current release channels.
 - The plugin preserves supplied HTTP headers; it does not rewrite the User-Agent or generate a browser-coherent header set, so headers must remain aligned with the selected profile.
+- In isolated Caido 0.59.0 checks, Chrome 157 negotiated HTTP/1.1 with Caido using both network stacks and omitted the `Priority` header present on a direct HTTP/2 navigation. The destination TLS and HTTP/2 settings and remaining ordered headers matched the direct capture. Supplying the captured headers through Caido CONNECT preserved `Priority` and the complete header order. The relay cannot reconstruct a header the browser did not send.
+- Identity warnings check browser family/version, platform, Chromium Client Hints and mobile identity when supplied. Missing headers or a lack of warnings do not prove browser parity. HTTP and WebSocket clients have separate TLS session caches; cross-mode session resumption is unverified.
 - HTTP/3/QUIC and custom ClientHello or JA3/JA4_r import are not implemented.
 
 Use this plugin only on systems you are authorized to test.
 
 ## Compatibility checks
+
+Build and verify the plugin entirely in Docker:
+
+```sh
+docker build --target artifact --output type=local,dest=dist .
+```
+
+This includes Go race tests and a ZIP check that executes the packaged helper's `--version` and verifies its SHA-256, manifest, catalog and package versions. The profile registry is shared by TypeScript and Go in `transport/internal/relay/catalog.json`; every advertised profile is checked against a verified local TLS origin.
+
+Run the independent browser-to-relay comparison with pinned upstream agent-browser **0.41.2** and Chrome for Testing **157.0.8103.38**:
+
+```sh
+docker build -f tests/browser/Dockerfile -t impersonate-tls-browser-test .
+docker run --rm --network none --shm-size=1g --cap-drop ALL --security-opt no-new-privileges impersonate-tls-browser-test
+```
+
+Both downloads are SHA-256 pinned in `tests/browser/versions.json`. The test uses a generated local CA with certificate verification enabled and a loopback-only diagnostic origin. It compares ClientHello ciphers/extensions, signature algorithms, groups, key shares, ALPN, application settings, certificate compression, exact trust-anchor order, HTTP/2 settings/window and ordered request headers. It covers fresh/reused HTTP/2, resumed HTTP/2 for the PSK variant, and a separate cold WebSocket origin. This verifies the relay directly; it does not certify a separately configured Caido instance or claim complete browser indistinguishability. GitHub Actions runs it separately from packaging.
+
+The release was also checked in a fresh, offline Caido 0.59.0 Docker instance: ZIP installation, automatic helper startup, all 86 selector entries, profile search and persistence after reload, private-header removal, completed Activity rows, HTTP uploads and verified HTTPS through CONNECT. Browser-to-Caido and relay-to-origin certificates were verified using disposable CAs. The browser-facing protocol difference above prevents a claim of full end-to-end browser parity.
 
 Run `go test -race ./...` from `transport/` for local HTTP/1.1 and HTTP/2 origins using the production client configuration, certificate verification and rejection, slow-TLS origin isolation, bounded client leases, streaming, cancellation (including queued bodyless requests), large uploads, overload, WebSockets, cookies, redirects, and compressed responses. `pnpm test:backend` checks settings races and transport lifecycle ordering against the compiled backend and bundled executable; build the transport assets first. The Docker verification stage runs both suites, type checking, lint, and unused-code checks before packaging.
 

@@ -5,8 +5,9 @@ import DataTable from "primevue/datatable";
 import Message from "primevue/message";
 import Tag from "primevue/tag";
 import type { ActivityEntry, ActivityState, Result } from "shared";
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 
+import { mergeActivity } from "../../../shared/src/activity";
 import { useSDK } from "../plugins/sdk";
 
 const sdk = useSDK();
@@ -14,6 +15,8 @@ const entries = ref<ActivityEntry[]>([]);
 const loading = ref(true);
 const clearing = ref(false);
 const error = ref("");
+let changes = 0;
+let refreshSequence = 0;
 const warningCount = computed(
   () => entries.value.filter((entry) => entry.warning !== undefined).length,
 );
@@ -26,25 +29,26 @@ function unwrap<T>(result: Result<T>): T {
 }
 
 function upsert(entry: ActivityEntry): void {
-  const index = entries.value.findIndex(
-    (candidate) => candidate.id === entry.id,
-  );
-  if (index === -1) {
-    entries.value.unshift(entry);
-  } else {
-    entries.value[index] = entry;
-  }
+  changes += 1;
+  entries.value = mergeActivity(entries.value, [entry]);
 }
 
 async function refresh(): Promise<void> {
+  const sequence = ++refreshSequence;
+  const revision = changes;
   loading.value = true;
   error.value = "";
   try {
-    entries.value = unwrap(await sdk.backend.getActivity());
+    const snapshot = unwrap(await sdk.backend.getActivity());
+    if (sequence !== refreshSequence) return;
+    entries.value =
+      revision === changes
+        ? mergeActivity([], snapshot)
+        : mergeActivity(snapshot, entries.value);
   } catch (cause) {
-    error.value = String(cause);
+    if (sequence === refreshSequence) error.value = String(cause);
   } finally {
-    loading.value = false;
+    if (sequence === refreshSequence) loading.value = false;
   }
 }
 
@@ -60,12 +64,16 @@ async function clear(): Promise<void> {
   }
 }
 
-function stateSeverity(state: ActivityState): "danger" | "info" | "success" {
+function stateSeverity(
+  state: ActivityState,
+): "danger" | "info" | "success" | "warn" {
   switch (state) {
     case "succeeded":
       return "success";
     case "failed":
       return "danger";
+    case "interrupted":
+      return "warn";
     default:
       return "info";
   }
@@ -84,15 +92,24 @@ function formatResult(entry: ActivityEntry): string {
     case "succeeded":
       return `${entry.statusCode?.toString() ?? "response"} · ${entry.protocol ?? "HTTP"}`;
     case "failed":
+    case "interrupted":
       return entry.error ?? "Transport failed";
     default:
       return "Waiting for the transport";
   }
 }
 
-sdk.backend.onEvent("activity:updated", upsert);
-sdk.backend.onEvent("activity:cleared", () => {
+const updates = sdk.backend.onEvent("activity:updated", upsert);
+const clears = sdk.backend.onEvent("activity:cleared", () => {
+  changes += 1;
+  refreshSequence += 1;
+  loading.value = false;
   entries.value = [];
+});
+onBeforeUnmount(() => {
+  refreshSequence += 1;
+  updates.stop();
+  clears.stop();
 });
 onMounted(() => void refresh());
 </script>
@@ -135,7 +152,7 @@ onMounted(() => void refresh());
 
     <Message v-if="warningCount > 0" severity="warn" :closable="false">
       {{ warningCount }} request{{ warningCount === 1 ? "" : "s" }} used a
-      Chrome User-Agent that does not match the selected transport profile.
+      browser identity that does not match the selected transport profile.
     </Message>
 
     <Message severity="secondary" :closable="false">

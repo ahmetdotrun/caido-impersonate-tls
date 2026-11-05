@@ -8,6 +8,8 @@ import tailwindcss from "tailwindcss";
 // @ts-expect-error tailwindcss-primeui does not publish TypeScript declarations.
 import tailwindPrimeui from "tailwindcss-primeui";
 
+import { PLUGIN_VERSION } from "./packages/shared/src/catalog";
+
 const id = "impersonate-tls";
 
 export default defineConfig({
@@ -15,7 +17,7 @@ export default defineConfig({
   name: "Impersonate TLS",
   description:
     "Apply browser-like TLS and HTTP transport profiles to domain-scoped Caido traffic.",
-  version: "0.2.5",
+  version: PLUGIN_VERSION,
   author: {
     name: "A. Eren Kilic",
     email: "aerenkilic@pm.me",

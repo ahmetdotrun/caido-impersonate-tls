@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { once } from "node:events";
 import { createServer } from "node:http";
 import { isIP } from "node:net";
@@ -13,6 +14,7 @@ import { promisify } from "node:util";
 import { gzipSync } from "node:zlib";
 
 const exec = promisify(execFile);
+const versions = JSON.parse(await readFile(new URL("../tests/browser/versions.json", import.meta.url)));
 const container = process.env.COMPAT_CONTAINER;
 const originHost = process.env.COMPAT_ORIGIN_HOST;
 const expectedSource = process.env.COMPAT_EXPECTED_SOURCE;
@@ -42,6 +44,8 @@ const docker = async (...args) => {
   }
 };
 const inspected = JSON.parse(await docker("inspect", container))[0];
+const agentVersion = await docker("exec", "--user", "browser", container, "agent-browser", "--version");
+assert.equal(agentVersion, `agent-browser ${versions.agentBrowser}`, "Rebuild the disposable runtime with the pinned vercel-labs/agent-browser release");
 assert.equal(
   inspected.Config.Labels["io.caido.compat.disposable"],
   "true",
@@ -217,7 +221,7 @@ server.on("upgrade", (req, socket, head) => {
 server.listen(0, originHost);
 await once(server, "listening");
 const base = `http://${originHost}:${server.address().port}${prefix}`;
-console.log(JSON.stringify({ fixture: base, container, lanes }));
+console.log(JSON.stringify({ fixture: base, container, image: inspected.Image, agentVersion, lanes }));
 
 function parsedOutput(stdout) {
   const output = JSON.parse(stdout);
@@ -339,7 +343,7 @@ try {
           lane,
           `(async()=>{
         await fetch(${JSON.stringify(base + "/cookies")});
-        const echo=await (await fetch(${JSON.stringify(base + "/redirect")})).json();
+        const echo=await (await fetch(${JSON.stringify(base + "/redirect")},{headers:{"X-Caido-Impersonate-Profile":"compatibility-probe-must-be-replaced"}})).json();
         const posted=await (await fetch(${JSON.stringify(base + "/redirect307")},{method:"POST",body:"keep-body"})).json();
         const compressed=await (await fetch(${JSON.stringify(base + "/gzip")})).text();
         const range=await fetch(${JSON.stringify(base + "/range")},{headers:{Range:"bytes=2-5"}});

@@ -45,7 +45,7 @@ func forwardContext(ctx context.Context, pool *clientPool, request *incomingRequ
 	}
 
 	authority := net.JoinHostPort(metadata.Host, metadata.Port)
-	targetURL := fmt.Sprintf("%s://%s%s", metadata.Scheme, authority, path)
+	targetURL := fmt.Sprintf("%s://%s/", metadata.Scheme, authority)
 	upstream, err := fhttp.NewRequestWithContext(
 		ctx,
 		request.Method,
@@ -55,11 +55,24 @@ func forwardContext(ctx context.Context, pool *clientPool, request *incomingRequ
 	if err != nil {
 		return nil, errors.New("create upstream request failed")
 	}
+	if path == "*" {
+		upstream.URL.Path = "*"
+	} else {
+		parsed, err := url.ParseRequestURI(path)
+		if err != nil {
+			return nil, errors.New("invalid request target")
+		}
+		upstream.URL.Path = parsed.Path
+		upstream.URL.RawPath = parsed.RawPath
+		upstream.URL.RawQuery = parsed.RawQuery
+		upstream.URL.ForceQuery = parsed.ForceQuery
+	}
 
 	websocketUpgrade := request.isWebSocketUpgrade()
 	connectionHeaders := request.connectionHeaderNames()
 	headerOrder := make([]string, 0, len(request.Headers))
 	orderedHeaders := make(map[string]struct{}, len(request.Headers))
+	headerNames := make(map[string]string, len(request.Headers))
 	appendHeaderOrder := func(name string) {
 		if _, found := orderedHeaders[name]; found {
 			return
@@ -84,7 +97,23 @@ func forwardContext(ctx context.Context, pool *clientPool, request *incomingRequ
 		if lowerName == "host" || lowerName == "content-length" {
 			continue
 		}
-		upstream.Header.Add(item.Name, item.Value)
+		name, seen := headerNames[lowerName]
+		if !seen {
+			name = item.Name
+			// fhttp handles these fields during serialization using canonical keys.
+			switch lowerName {
+			case "user-agent":
+				name = "User-Agent"
+			case "connection":
+				name = "Connection"
+			case "upgrade":
+				name = "Upgrade"
+			case "expect":
+				name = "Expect"
+			}
+			headerNames[lowerName] = name
+		}
+		upstream.Header[name] = append(upstream.Header[name], item.Value)
 	}
 	if len(request.headerValues("User-Agent")) == 0 {
 		upstream.Header.Set("User-Agent", "")

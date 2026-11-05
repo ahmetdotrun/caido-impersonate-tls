@@ -16,7 +16,8 @@ import (
 	"github.com/caido-impersonate-tls/transport/internal/relay"
 )
 
-const version = "0.2.5"
+var version = relay.Version
+
 const minimumTokenLength = 32
 const ownerPollInterval = 5 * time.Second
 const ownerTimeout = 20 * time.Second
@@ -28,10 +29,15 @@ type readyEvent struct {
 }
 
 func main() {
+	showVersion := flag.Bool("version", false, "print the transport version")
 	listenAddress := flag.String("listen", "127.0.0.1:0", "private listen address")
 	tokenFile := flag.String("token-file", "", "path to the one-time transport token")
 	ownerFile := flag.String("owner-file", "", "path to the plugin ownership heartbeat")
 	flag.Parse()
+	if *showVersion {
+		fmt.Println(version)
+		return
+	}
 
 	if *tokenFile == "" || *ownerFile == "" {
 		fmt.Fprintln(os.Stderr, "token-file and owner-file are required")

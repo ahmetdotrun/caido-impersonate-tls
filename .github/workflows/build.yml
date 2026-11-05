@@ -13,6 +13,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  profiles:
+    name: Compare pinned upstream browser and relay
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Build disposable browser fixture
+        run: docker build -f tests/browser/Dockerfile -t impersonate-tls-browser-test .
+      - name: Compare local destination fingerprints
+        run: docker run --rm --network none --shm-size=1g --cap-drop ALL --security-opt no-new-privileges impersonate-tls-browser-test
+
   build:
     name: Verify and package
     runs-on: ubuntu-24.04

@@ -21,7 +21,9 @@ const testToken = "reliability-test-token-with-at-least-32-bytes"
 
 func startRelayTest(t *testing.T, handler http.HandlerFunc, configure func(*Server)) (string, string, context.CancelFunc) {
 	t.Helper()
-	target := httptest.NewServer(handler)
+	target := httptest.NewUnstartedServer(handler)
+	target.Config.DisableGeneralOptionsHandler = true
+	target.Start()
 	t.Cleanup(target.Close)
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

@@ -1,6 +1,6 @@
 {
   "name": "caido-impersonate-tls",
-  "version": "0.2.5",
+  "version": "0.3.0",
   "private": true,
   "author": {
     "name": "A. Eren Kilic",
@@ -19,6 +19,8 @@
   "scripts": {
     "test:backend": "tsc -p packages/backend/tsconfig.test.json && node --test tests/backend/*.test.cjs",
     "test:browser": "node scripts/browser-compat.mjs",
+    "test:profiles": "node scripts/profile-compat.mjs",
+    "verify:package": "node scripts/verify-package.mjs",
     "build": "caido-dev build",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint ./packages/**/src --max-warnings 0",

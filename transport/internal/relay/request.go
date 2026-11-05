@@ -247,7 +247,10 @@ func validTraceID(value string) bool {
 
 func (request *incomingRequest) targetPath() (string, error) {
 	if request.RequestURI == "*" {
-		return "/", nil
+		if request.Method != "OPTIONS" {
+			return "", errors.New("asterisk target requires OPTIONS")
+		}
+		return "*", nil
 	}
 
 	parsed, err := url.ParseRequestURI(request.RequestURI)

@@ -1,5 +1,9 @@
 import type { DefinePluginPackageSpec } from "@caido/sdk-shared";
 
+import type { Profile } from "./catalog";
+
+export type { Profile };
+
 export type Result<T> =
   { kind: "Ok"; value: T } | { kind: "Error"; error: string };
 
@@ -24,16 +28,11 @@ export type Settings = {
   maximumUploadMiB: number;
 };
 
-export type Profile = {
-  id: string;
-  label: string;
-  family: "chromium" | "firefox" | "safari" | "mobile";
-};
-
-export type ActivityState = "routed" | "succeeded" | "failed";
+export type ActivityState = "routed" | "succeeded" | "failed" | "interrupted";
 
 export type ActivityEntry = {
   id: string;
+  sequence: number;
   startedAt: number;
   completedAt?: number;
   state: ActivityState;

@@ -6,10 +6,35 @@ import (
 	"io"
 	"net/http"
 	"net/http/httputil"
+	"net/textproto"
 	"strings"
 
 	fhttp "github.com/bogdanfinn/fhttp"
 )
+
+// Informational responses do not terminate the exchange or carry a body.
+func writeInformational(writer io.Writer, code int, headers textproto.MIMEHeader) error {
+	response := &fhttp.Response{Header: fhttp.Header(headers)}
+	buffered := bufio.NewWriter(writer)
+	if _, err := fmt.Fprintf(buffered, "HTTP/1.1 %d %s\r\n", code, http.StatusText(code)); err != nil {
+		return err
+	}
+	for name, values := range headers {
+		lower := strings.ToLower(name)
+		if _, hop := fixedHopHeaders[lower]; hop || lower == "content-length" || responseConnectionHeader(response, lower) {
+			continue
+		}
+		for _, value := range values {
+			if _, err := fmt.Fprintf(buffered, "%s: %s\r\n", name, value); err != nil {
+				return err
+			}
+		}
+	}
+	if _, err := io.WriteString(buffered, "\r\n"); err != nil {
+		return err
+	}
+	return buffered.Flush()
+}
 
 func writeResponse(writer io.Writer, method string, response *fhttp.Response) error {
 	defer response.Body.Close()

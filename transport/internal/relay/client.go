@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	tls_client "github.com/bogdanfinn/tls-client"
 	"github.com/bogdanfinn/tls-client/profiles"
+	tls "github.com/bogdanfinn/utls"
 )
 
 const maxPooledClients = 256
@@ -116,6 +118,10 @@ func (pool *clientPool) close() {
 }
 
 func newProfileClient(profileName string, forceHTTP1 bool, roots *x509.CertPool) (tls_client.HttpClient, error) {
+	metadata, advertised := profileMetadata(profileName)
+	if !advertised {
+		return nil, fmt.Errorf("unknown transport profile %q", profileName)
+	}
 	profile, found := customTransportProfiles[profileName]
 	if !found {
 		profile, found = profiles.MappedTLSClients[profileName]
@@ -123,10 +129,33 @@ func newProfileClient(profileName string, forceHTTP1 bool, roots *x509.CertPool)
 			return nil, fmt.Errorf("unknown transport profile %q", profileName)
 		}
 	}
+	if forceHTTP1 {
+		base := profile
+		id := base.GetClientHelloId()
+		id.SpecFactory = func() (tls.ClientHelloSpec, error) {
+			spec, err := base.GetClientHelloSpec()
+			if err != nil {
+				return spec, err
+			}
+			extensions := spec.Extensions[:0]
+			for _, extension := range spec.Extensions {
+				switch extension.(type) {
+				case *tls.ApplicationSettingsExtension, *tls.ApplicationSettingsExtensionNew:
+				default:
+					extensions = append(extensions, extension)
+				}
+			}
+			spec.Extensions = extensions
+			return spec, nil
+		}
+		profile = profiles.NewClientProfile(id, base.GetSettings(), base.GetSettingsOrder(), base.GetPseudoHeaderOrder(),
+			base.GetConnectionFlow(), base.GetPriorities(), base.GetHeaderPriority(), base.GetStreamID(), base.GetAllowHTTP(), nil, nil, 0, nil, false)
+	}
 
 	options := []tls_client.HttpClientOption{
 		tls_client.WithClientProfile(profile),
 		tls_client.WithNotFollowRedirects(),
+		tls_client.WithDisableHttp3(),
 		// The relay owns header and inactivity deadlines. A whole-response
 		// timeout would truncate healthy streams and slow downloads.
 		tls_client.WithTimeoutSeconds(0),
@@ -139,7 +168,8 @@ func newProfileClient(profileName string, forceHTTP1 bool, roots *x509.CertPool)
 			MaxResponseHeaderBytes: maxHeaderBytes,
 		}),
 	}
-	if strings.HasPrefix(profileName, "chrome_") {
+	major, _ := strconv.Atoi(metadata.Version)
+	if (strings.HasPrefix(profileName, "chrome_") && major >= 110) || strings.HasPrefix(profileName, "brave_") {
 		options = append(options, tls_client.WithRandomTLSExtensionOrder())
 	}
 	if forceHTTP1 {

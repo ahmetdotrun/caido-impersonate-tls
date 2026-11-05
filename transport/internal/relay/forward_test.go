@@ -116,7 +116,7 @@ func TestForwardPreservesGeneratedHeaderPositions(t *testing.T) {
 		Protocol:   "HTTP/1.1",
 		Headers: []header{
 			{Name: "Host", Value: net.JoinHostPort(host, port)},
-			{Name: "X-First", Value: "one"},
+			{Name: "x-FiRsT", Value: "one"},
 			{Name: "Content-Length", Value: "4"},
 			{Name: "X-Second", Value: "two"},
 		},
@@ -141,6 +141,9 @@ func TestForwardPreservesGeneratedHeaderPositions(t *testing.T) {
 		t.Fatalf("capture request: %v", result.err)
 	}
 	joined := strings.Join(result.lines, "\n")
+	if !strings.Contains(joined, "x-FiRsT: one") {
+		t.Fatalf("header casing changed:\n%s", joined)
+	}
 	if strings.Contains(joined, "Go-http-client") {
 		t.Fatalf("request exposed the Go default User-Agent:\n%s", joined)
 	}

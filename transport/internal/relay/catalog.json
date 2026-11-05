@@ -1,0 +1,631 @@
+{
+  "version": "0.3.0",
+  "tlsClientVersion": "1.16.0",
+  "profiles": [
+    {
+      "id": "chrome_157_cft",
+      "label": "Chrome for Testing 157 (Linux)",
+      "family": "chromium",
+      "version": "157",
+      "platform": "linux",
+      "source": "local",
+      "verifiedBuilds": [
+        "157.0.8103.38"
+      ],
+      "verification": "2026-11-05: headed vercel-labs/agent-browser 0.41.2; fresh/reused HTTP/2, ordered headers and cold WebSocket. Cross-mode session resumption is unverified."
+    },
+    {
+      "id": "chrome_157_cft_PSK",
+      "label": "Chrome for Testing 157 (Linux, PSK)",
+      "family": "chromium",
+      "version": "157",
+      "platform": "linux",
+      "source": "local",
+      "verifiedBuilds": [
+        "157.0.8103.38"
+      ],
+      "verification": "2026-11-05: headed vercel-labs/agent-browser 0.41.2; fresh/reused/resumed HTTP/2 and cold WebSocket. Cross-mode session resumption is unverified."
+    },
+    {
+      "id": "chrome_152_cft",
+      "label": "Chrome for Testing 152 (Linux)",
+      "family": "chromium",
+      "version": "152",
+      "platform": "linux",
+      "source": "local",
+      "verifiedBuilds": [
+        "152.0.7977.54",
+        "152.0.7977.82"
+      ],
+      "verification": "Destination TLS and HTTP/2 measurements; see README."
+    },
+    {
+      "id": "zalando_ios_mobile",
+      "label": "Zalando Ios Mobile",
+      "family": "application",
+      "platform": "ios",
+      "source": "tls-client"
+    },
+    {
+      "id": "zalando_android_mobile",
+      "label": "Zalando Android Mobile",
+      "family": "application",
+      "platform": "android",
+      "source": "tls-client"
+    },
+    {
+      "id": "nike_ios_mobile",
+      "label": "Nike Ios Mobile",
+      "family": "application",
+      "platform": "ios",
+      "source": "tls-client"
+    },
+    {
+      "id": "nike_android_mobile",
+      "label": "Nike Android Mobile",
+      "family": "application",
+      "platform": "android",
+      "source": "tls-client"
+    },
+    {
+      "id": "mms_ios_3",
+      "label": "Mms Ios 3",
+      "family": "application",
+      "platform": "ios",
+      "source": "tls-client"
+    },
+    {
+      "id": "mms_ios_2",
+      "label": "Mms Ios 2",
+      "family": "application",
+      "platform": "ios",
+      "source": "tls-client"
+    },
+    {
+      "id": "mms_ios_1",
+      "label": "Mms Ios 1",
+      "family": "application",
+      "platform": "ios",
+      "source": "tls-client"
+    },
+    {
+      "id": "mms_ios",
+      "label": "Mms Ios",
+      "family": "application",
+      "platform": "ios",
+      "source": "tls-client"
+    },
+    {
+      "id": "mesh_ios_2",
+      "label": "Mesh Ios 2",
+      "family": "application",
+      "platform": "ios",
+      "source": "tls-client"
+    },
+    {
+      "id": "mesh_ios_1",
+      "label": "Mesh Ios 1",
+      "family": "application",
+      "platform": "ios",
+      "source": "tls-client"
+    },
+    {
+      "id": "mesh_ios",
+      "label": "Mesh Ios",
+      "family": "application",
+      "platform": "ios",
+      "source": "tls-client"
+    },
+    {
+      "id": "mesh_android_2",
+      "label": "Mesh Android 2",
+      "family": "application",
+      "platform": "android",
+      "source": "tls-client"
+    },
+    {
+      "id": "mesh_android_1",
+      "label": "Mesh Android 1",
+      "family": "application",
+      "platform": "android",
+      "source": "tls-client"
+    },
+    {
+      "id": "mesh_android",
+      "label": "Mesh Android",
+      "family": "application",
+      "platform": "android",
+      "source": "tls-client"
+    },
+    {
+      "id": "confirmed_ios",
+      "label": "Confirmed Ios",
+      "family": "application",
+      "platform": "ios",
+      "source": "tls-client"
+    },
+    {
+      "id": "confirmed_android",
+      "label": "Confirmed Android",
+      "family": "application",
+      "platform": "android",
+      "source": "tls-client"
+    },
+    {
+      "id": "cloudscraper",
+      "label": "Cloudscraper",
+      "family": "application",
+      "source": "tls-client"
+    },
+    {
+      "id": "opera_91",
+      "label": "Opera 91",
+      "family": "chromium",
+      "version": "91",
+      "source": "tls-client"
+    },
+    {
+      "id": "opera_90",
+      "label": "Opera 90",
+      "family": "chromium",
+      "version": "90",
+      "source": "tls-client"
+    },
+    {
+      "id": "opera_89",
+      "label": "Opera 89",
+      "family": "chromium",
+      "version": "89",
+      "source": "tls-client"
+    },
+    {
+      "id": "chrome_152_PSK",
+      "label": "Chrome 152 PSK",
+      "family": "chromium",
+      "version": "152",
+      "source": "tls-client"
+    },
+    {
+      "id": "chrome_152",
+      "label": "Chrome 152",
+      "family": "chromium",
+      "version": "152",
+      "source": "tls-client"
+    },
+    {
+      "id": "chrome_150_PSK",
+      "label": "Chrome 150 PSK",
+      "family": "chromium",
+      "version": "150",
+      "source": "tls-client"
+    },
+    {
+      "id": "chrome_150",
+      "label": "Chrome 150",
+      "family": "chromium",
+      "version": "150",
+      "source": "tls-client"
+    },
+    {
+      "id": "chrome_146_PSK",
+      "label": "Chrome 146 PSK",
+      "family": "chromium",
+      "version": "146",
+      "source": "tls-client"
+    },
+    {
+      "id": "chrome_146",
+      "label": "Chrome 146",
+      "family": "chromium",
+      "version": "146",
+      "source": "tls-client"
+    },
+    {
+      "id": "chrome_144_PSK",
+      "label": "Chrome 144 PSK",
+      "family": "chromium",
+      "version": "144",
+      "source": "tls-client"
+    },
+    {
+      "id": "chrome_144",
+      "label": "Chrome 144",
+      "family": "chromium",
+      "version": "144",
+      "source": "tls-client"
+    },
+    {
+      "id": "chrome_133_PSK",
+      "label": "Chrome 133 PSK",
+      "family": "chromium",
+      "version": "133",
+      "source": "tls-client"
+    },
+    {
+      "id": "chrome_133",
+      "label": "Chrome 133",
+      "family": "chromium",
+      "version": "133",
+      "source": "tls-client"
+    },
+    {
+      "id": "chrome_131_PSK",
+      "label": "Chrome 131 PSK",
+      "family": "chromium",
+      "version": "131",
+      "source": "tls-client"
+    },
+    {
+      "id": "chrome_131",
+      "label": "Chrome 131",
+      "family": "chromium",
+      "version": "131",
+      "source": "tls-client"
+    },
+    {
+      "id": "chrome_130_PSK",
+      "label": "Chrome 130 PSK",
+      "family": "chromium",
+      "version": "130",
+      "source": "tls-client"
+    },
+    {
+      "id": "chrome_124",
+      "label": "Chrome 124",
+      "family": "chromium",
+      "version": "124",
+      "source": "tls-client"
+    },
+    {
+      "id": "chrome_120",
+      "label": "Chrome 120",
+      "family": "chromium",
+      "version": "120",
+      "source": "tls-client"
+    },
+    {
+      "id": "chrome_117",
+      "label": "Chrome 117",
+      "family": "chromium",
+      "version": "117",
+      "source": "tls-client"
+    },
+    {
+      "id": "chrome_116_PSK_PQ",
+      "label": "Chrome 116 PSK + PQ",
+      "family": "chromium",
+      "version": "116",
+      "source": "tls-client"
+    },
+    {
+      "id": "chrome_116_PSK",
+      "label": "Chrome 116 PSK",
+      "family": "chromium",
+      "version": "116",
+      "source": "tls-client"
+    },
+    {
+      "id": "chrome_112",
+      "label": "Chrome 112",
+      "family": "chromium",
+      "version": "112",
+      "source": "tls-client"
+    },
+    {
+      "id": "chrome_111",
+      "label": "Chrome 111",
+      "family": "chromium",
+      "version": "111",
+      "source": "tls-client"
+    },
+    {
+      "id": "chrome_110",
+      "label": "Chrome 110",
+      "family": "chromium",
+      "version": "110",
+      "source": "tls-client"
+    },
+    {
+      "id": "chrome_109",
+      "label": "Chrome 109",
+      "family": "chromium",
+      "version": "109",
+      "source": "tls-client"
+    },
+    {
+      "id": "chrome_108",
+      "label": "Chrome 108",
+      "family": "chromium",
+      "version": "108",
+      "source": "tls-client"
+    },
+    {
+      "id": "chrome_107",
+      "label": "Chrome 107",
+      "family": "chromium",
+      "version": "107",
+      "source": "tls-client"
+    },
+    {
+      "id": "chrome_106",
+      "label": "Chrome 106",
+      "family": "chromium",
+      "version": "106",
+      "source": "tls-client"
+    },
+    {
+      "id": "chrome_105",
+      "label": "Chrome 105",
+      "family": "chromium",
+      "version": "105",
+      "source": "tls-client"
+    },
+    {
+      "id": "chrome_104",
+      "label": "Chrome 104",
+      "family": "chromium",
+      "version": "104",
+      "source": "tls-client"
+    },
+    {
+      "id": "chrome_103",
+      "label": "Chrome 103",
+      "family": "chromium",
+      "version": "103",
+      "source": "tls-client"
+    },
+    {
+      "id": "brave_146_PSK",
+      "label": "Brave 146 PSK",
+      "family": "chromium",
+      "version": "146",
+      "source": "tls-client"
+    },
+    {
+      "id": "brave_146",
+      "label": "Brave 146",
+      "family": "chromium",
+      "version": "146",
+      "source": "tls-client"
+    },
+    {
+      "id": "firefox_148",
+      "label": "Firefox 148",
+      "family": "firefox",
+      "version": "148",
+      "source": "tls-client"
+    },
+    {
+      "id": "firefox_147_PSK",
+      "label": "Firefox 147 PSK",
+      "family": "firefox",
+      "version": "147",
+      "source": "tls-client"
+    },
+    {
+      "id": "firefox_147",
+      "label": "Firefox 147",
+      "family": "firefox",
+      "version": "147",
+      "source": "tls-client"
+    },
+    {
+      "id": "firefox_146_PSK",
+      "label": "Firefox 146 PSK",
+      "family": "firefox",
+      "version": "146",
+      "source": "tls-client"
+    },
+    {
+      "id": "firefox_135",
+      "label": "Firefox 135",
+      "family": "firefox",
+      "version": "135",
+      "source": "tls-client"
+    },
+    {
+      "id": "firefox_133",
+      "label": "Firefox 133",
+      "family": "firefox",
+      "version": "133",
+      "source": "tls-client"
+    },
+    {
+      "id": "firefox_132",
+      "label": "Firefox 132",
+      "family": "firefox",
+      "version": "132",
+      "source": "tls-client"
+    },
+    {
+      "id": "firefox_123",
+      "label": "Firefox 123",
+      "family": "firefox",
+      "version": "123",
+      "source": "tls-client"
+    },
+    {
+      "id": "firefox_120",
+      "label": "Firefox 120",
+      "family": "firefox",
+      "version": "120",
+      "source": "tls-client"
+    },
+    {
+      "id": "firefox_117",
+      "label": "Firefox 117",
+      "family": "firefox",
+      "version": "117",
+      "source": "tls-client"
+    },
+    {
+      "id": "firefox_110",
+      "label": "Firefox 110",
+      "family": "firefox",
+      "version": "110",
+      "source": "tls-client"
+    },
+    {
+      "id": "firefox_108",
+      "label": "Firefox 108",
+      "family": "firefox",
+      "version": "108",
+      "source": "tls-client"
+    },
+    {
+      "id": "firefox_106",
+      "label": "Firefox 106",
+      "family": "firefox",
+      "version": "106",
+      "source": "tls-client"
+    },
+    {
+      "id": "firefox_105",
+      "label": "Firefox 105",
+      "family": "firefox",
+      "version": "105",
+      "source": "tls-client"
+    },
+    {
+      "id": "firefox_104",
+      "label": "Firefox 104",
+      "family": "firefox",
+      "version": "104",
+      "source": "tls-client"
+    },
+    {
+      "id": "firefox_102",
+      "label": "Firefox 102",
+      "family": "firefox",
+      "version": "102",
+      "source": "tls-client"
+    },
+    {
+      "id": "okhttp4_android_13",
+      "label": "OkHttp 4 / Android 13",
+      "family": "okhttp",
+      "platform": "android",
+      "source": "tls-client"
+    },
+    {
+      "id": "okhttp4_android_12",
+      "label": "OkHttp 4 / Android 12",
+      "family": "okhttp",
+      "platform": "android",
+      "source": "tls-client"
+    },
+    {
+      "id": "okhttp4_android_11",
+      "label": "OkHttp 4 / Android 11",
+      "family": "okhttp",
+      "platform": "android",
+      "source": "tls-client"
+    },
+    {
+      "id": "okhttp4_android_10",
+      "label": "OkHttp 4 / Android 10",
+      "family": "okhttp",
+      "platform": "android",
+      "source": "tls-client"
+    },
+    {
+      "id": "okhttp4_android_9",
+      "label": "OkHttp 4 / Android 9",
+      "family": "okhttp",
+      "platform": "android",
+      "source": "tls-client"
+    },
+    {
+      "id": "okhttp4_android_8",
+      "label": "OkHttp 4 / Android 8",
+      "family": "okhttp",
+      "platform": "android",
+      "source": "tls-client"
+    },
+    {
+      "id": "okhttp4_android_7",
+      "label": "OkHttp 4 / Android 7",
+      "family": "okhttp",
+      "platform": "android",
+      "source": "tls-client"
+    },
+    {
+      "id": "safari_ipad_15_6",
+      "label": "Safari iPadOS 15.6",
+      "family": "safari",
+      "version": "15.6",
+      "platform": "ios",
+      "source": "tls-client"
+    },
+    {
+      "id": "safari_ios_26_0",
+      "label": "Safari iOS 26.0",
+      "family": "safari",
+      "version": "26.0",
+      "platform": "ios",
+      "source": "tls-client"
+    },
+    {
+      "id": "safari_ios_18_5",
+      "label": "Safari iOS 18.5",
+      "family": "safari",
+      "version": "18.5",
+      "platform": "ios",
+      "source": "tls-client"
+    },
+    {
+      "id": "safari_ios_18_0",
+      "label": "Safari iOS 18.0",
+      "family": "safari",
+      "version": "18.0",
+      "platform": "ios",
+      "source": "tls-client"
+    },
+    {
+      "id": "safari_ios_17_0",
+      "label": "Safari iOS 17.0",
+      "family": "safari",
+      "version": "17.0",
+      "platform": "ios",
+      "source": "tls-client"
+    },
+    {
+      "id": "safari_ios_16_0",
+      "label": "Safari iOS 16.0",
+      "family": "safari",
+      "version": "16.0",
+      "platform": "ios",
+      "source": "tls-client"
+    },
+    {
+      "id": "safari_ios_15_6",
+      "label": "Safari iOS 15.6",
+      "family": "safari",
+      "version": "15.6",
+      "platform": "ios",
+      "source": "tls-client"
+    },
+    {
+      "id": "safari_ios_15_5",
+      "label": "Safari iOS 15.5",
+      "family": "safari",
+      "version": "15.5",
+      "platform": "ios",
+      "source": "tls-client"
+    },
+    {
+      "id": "safari_16_0",
+      "label": "Safari 16.0",
+      "family": "safari",
+      "version": "16.0",
+      "source": "tls-client"
+    },
+    {
+      "id": "safari_15_6_1",
+      "label": "Safari 15.6.1",
+      "family": "safari",
+      "version": "15.6.1",
+      "source": "tls-client"
+    }
+  ]
+}

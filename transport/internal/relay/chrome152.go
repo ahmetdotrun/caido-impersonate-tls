@@ -6,167 +6,75 @@ import (
 	"encoding/hex"
 	"math/big"
 
-	"github.com/bogdanfinn/fhttp/http2"
 	"github.com/bogdanfinn/tls-client/profiles"
 	tls "github.com/bogdanfinn/utls"
 )
 
-// Captured profile source: https://github.com/bogdanfinn/tls-client/pull/265
-const chrome152TrustAnchorsCapture = "00b80582df13020108839a648c9b2d010c08839a648c9b2d010704d679090c08839a648c9b2d010a04d679090b08839a648c9b2d010d0582df13020e08839a648c9b2d010b04d67909050582df13020d0582df13021404d679090404d679090804d679090d04d679090a04d679090708839a648c9b2d011204d67909010582df13020608839a648c9b2d01080582df13021208839a648c9b2d011304d679090f0582df13021308839a648c9b2d01090582df13020f04d6790906"
-
-var chrome152TrustAnchors = shuffledTrustAnchors(chrome152TrustAnchorsCapture)
-
-// Chrome for Testing 152.0.7977.54 and 152.0.7977.82 on Linux advertise
-// server_padding and this larger root-store snapshot. Measured with fresh
-// headed agent-browser profiles at https://tls.peet.ws/api/all.
+// Captured from Linux Chrome for Testing 152.0.7977.54 and .82.
 const chrome152CfTTrustAnchorsCapture = "00cc04d679090804d67909020582df13020e04d679090e08839a648c9b2d011308839a648c9b2d010708839a648c9b2d010d04d67909090582df13020d04d679090608839a648c9b2d010c0582df1302130582df13020604d679090404d679090f0582df13020f04d679090a04d67909070582df13021204d67909050582df13020104d679090b0582df13021408839a648c9b2d010804d679090c08839a648c9b2d010a08839a648c9b2d010904d679090308839a648c9b2d010b04d679090104d679090d08839a648c9b2d0112"
 
 var chrome152CfTTrustAnchors = shuffledTrustAnchors(chrome152CfTTrustAnchorsCapture)
+var chrome152TrustAnchors = profileTrustAnchors(profiles.Chrome_152)
 
-var customTransportProfiles = map[string]profiles.ClientProfile{
-	"chrome_152":     newChrome152Profile(false),
-	"chrome_152_cft": newChrome152Profile(true),
-}
+// Linux CfT 157.0.8103.38 emitted this order in independent browser processes.
+const chrome157CfTTrustAnchorsCapture = "00b80582df1302010582df1302060582df13020d0582df13020e0582df13020f0582df1302120582df1302130582df13021408839a648c9b2d010708839a648c9b2d010808839a648c9b2d010908839a648c9b2d010a08839a648c9b2d010b08839a648c9b2d010c08839a648c9b2d010d08839a648c9b2d011208839a648c9b2d011304d679090104d679090404d679090504d679090604d679090704d679090804d679090a04d679090b04d679090c04d679090d04d679090f"
 
-func newChrome152Profile(forTesting bool) profiles.ClientProfile {
-	trustAnchors := chrome152TrustAnchors
-	if forTesting {
-		trustAnchors = chrome152CfTTrustAnchors
-	}
-	clientHelloID := tls.ClientHelloID{
-		Client:               "Chrome",
-		RandomExtensionOrder: false,
-		Version:              "152",
-		Seed:                 nil,
-		SpecFactory: func() (tls.ClientHelloSpec, error) {
-			spec := tls.ClientHelloSpec{
-				CipherSuites: []uint16{
-					tls.GREASE_PLACEHOLDER,
-					tls.TLS_AES_128_GCM_SHA256,
-					tls.TLS_AES_256_GCM_SHA384,
-					tls.TLS_CHACHA20_POLY1305_SHA256,
-					tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-					tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-					tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-					tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-					tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
-					tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-					tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
-					tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
-					tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
-					tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
-					tls.TLS_RSA_WITH_AES_128_CBC_SHA,
-					tls.TLS_RSA_WITH_AES_256_CBC_SHA,
-				},
-				CompressionMethods: []byte{tls.CompressionNone},
-				Extensions: []tls.TLSExtension{
-					&tls.UtlsGREASEExtension{},
-					&tls.KeyShareExtension{KeyShares: []tls.KeyShare{
-						{Group: tls.CurveID(tls.GREASE_PLACEHOLDER), Data: []byte{0}},
-						{Group: tls.X25519MLKEM768},
-						{Group: tls.X25519},
-					}},
-					&tls.SNIExtension{},
-					&tls.ApplicationSettingsExtensionNew{SupportedProtocols: []string{"h2"}},
-					&tls.RenegotiationInfoExtension{Renegotiation: tls.RenegotiateOnceAsClient},
-					&tls.SupportedCurvesExtension{Curves: []tls.CurveID{
-						tls.GREASE_PLACEHOLDER,
-						tls.X25519MLKEM768,
-						tls.X25519,
-						tls.CurveP256,
-						tls.CurveP384,
-					}},
-					&tls.UtlsCompressCertExtension{Algorithms: []tls.CertCompressionAlgo{
-						tls.CertCompressionBrotli,
-					}},
-					&tls.SessionTicketExtension{},
-					&tls.StatusRequestExtension{},
-					&tls.ExtendedMasterSecretExtension{},
-					&tls.SupportedVersionsExtension{Versions: []uint16{
-						tls.GREASE_PLACEHOLDER,
-						tls.VersionTLS13,
-						tls.VersionTLS12,
-					}},
-					&tls.SignatureAlgorithmsExtension{SupportedSignatureAlgorithms: []tls.SignatureScheme{
-						chrome152GREASESignatureScheme(),
-						tls.SignatureScheme(0x0904),
-						tls.SignatureScheme(0x0905),
-						tls.SignatureScheme(0x0906),
-						tls.ECDSAWithP256AndSHA256,
-						tls.PSSWithSHA256,
-						tls.PKCS1WithSHA256,
-						tls.ECDSAWithP384AndSHA384,
-						tls.PSSWithSHA384,
-						tls.PKCS1WithSHA384,
-						tls.PSSWithSHA512,
-						tls.PKCS1WithSHA512,
-					}},
-					&tls.SCTExtension{},
-					&tls.SupportedPointsExtension{SupportedPoints: []byte{tls.PointFormatUncompressed}},
-					tls.BoringGREASEECH(),
-					&tls.ALPNExtension{AlpnProtocols: []string{"h2", "http/1.1"}},
-					&tls.PSKKeyExchangeModesExtension{Modes: []uint8{tls.PskModeDHE}},
-					&tls.GenericExtension{Id: 0xca34, Data: trustAnchors},
-					&tls.UtlsGREASEExtension{},
-				},
-			}
-			if forTesting {
-				// BoringSSL's server_padding extension requests a minimum of zero
-				// padding bytes. Keep the terminal GREASE extension at the end.
-				spec.Extensions = append(spec.Extensions[:len(spec.Extensions)-1],
-					&tls.GenericExtension{Id: 4832, Data: []byte{0, 0}},
-					&tls.UtlsGREASEExtension{},
-				)
-			}
-			return spec, nil
-		},
-	}
-
-	settings := map[http2.SettingID]uint32{
-		http2.SettingHeaderTableSize:   65536,
-		http2.SettingEnablePush:        0,
-		http2.SettingInitialWindowSize: 6291456,
-		http2.SettingMaxHeaderListSize: 262144,
-	}
-	settingsOrder := []http2.SettingID{
-		http2.SettingHeaderTableSize,
-		http2.SettingEnablePush,
-		http2.SettingInitialWindowSize,
-		http2.SettingMaxHeaderListSize,
-	}
-	pseudoHeaderOrder := []string{":method", ":authority", ":scheme", ":path"}
-
-	return profiles.NewClientProfile(
-		clientHelloID,
-		settings,
-		settingsOrder,
-		pseudoHeaderOrder,
-		15663105,
-		nil,
-		nil,
-		0,
-		false,
-		nil,
-		nil,
-		0,
-		nil,
-		false,
-	)
-}
-
-// Chrome 152 draws a GREASE signature algorithm for every ClientHello. The
-// pinned uTLS fork does not yet replace a GREASE placeholder in this extension,
-// so the profile chooses the wire value in its per-connection SpecFactory.
-func chrome152GREASESignatureScheme() tls.SignatureScheme {
-	var seed [2]byte
-	if _, err := rand.Read(seed[:]); err != nil {
+var chrome157CfTTrustAnchors = func() []byte {
+	data, err := hex.DecodeString(chrome157CfTTrustAnchorsCapture)
+	if err != nil {
 		panic(err)
 	}
+	return data
+}()
 
-	value := binary.LittleEndian.Uint16(seed[:])
-	value = (value & 0x00f0) | 0x000a
-	value |= value << 8
-	return tls.SignatureScheme(value)
+var customTransportProfiles = map[string]profiles.ClientProfile{
+	"chrome_152":     profiles.Chrome_152,
+	"chrome_152_cft": chromeForTestingProfile(profiles.Chrome_152, "152", chrome152CfTTrustAnchors),
+	// The 157 Linux capture has the base 152 anchor set and server_padding.
+	// The local destination comparison verifies the complete normalized shape.
+	"chrome_157_cft":     chromeForTestingProfile(profiles.Chrome_152, "157", chrome157CfTTrustAnchors),
+	"chrome_157_cft_PSK": chromeForTestingProfile(profiles.Chrome_152_PSK, "157_PSK", chrome157CfTTrustAnchors),
+}
+
+func profileTrustAnchors(profile profiles.ClientProfile) []byte {
+	spec, err := profile.GetClientHelloSpec()
+	if err != nil {
+		panic(err)
+	}
+	for _, extension := range spec.Extensions {
+		if generic, ok := extension.(*tls.GenericExtension); ok && generic.Id == 0xca34 {
+			return generic.Data
+		}
+	}
+	panic("base Chrome profile has no trust anchors")
+}
+
+func chromeForTestingProfile(base profiles.ClientProfile, version string, anchors []byte) profiles.ClientProfile {
+	id := base.GetClientHelloId()
+	id.Version = version
+	id.SpecFactory = func() (tls.ClientHelloSpec, error) {
+		spec, err := base.GetClientHelloSpec()
+		if err != nil {
+			return spec, err
+		}
+		paddingIndex := len(spec.Extensions)
+		for i, extension := range spec.Extensions {
+			if generic, ok := extension.(*tls.GenericExtension); ok && generic.Id == 0xca34 && anchors != nil {
+				spec.Extensions[i] = &tls.GenericExtension{Id: 0xca34, Data: anchors}
+			}
+			if _, grease := extension.(*tls.UtlsGREASEExtension); grease {
+				paddingIndex = i
+			}
+		}
+		// Preserve terminal GREASE and the PSK extension's required last position.
+		spec.Extensions = append(spec.Extensions, nil)
+		copy(spec.Extensions[paddingIndex+1:], spec.Extensions[paddingIndex:])
+		spec.Extensions[paddingIndex] = &tls.GenericExtension{Id: 4832, Data: []byte{0, 0}}
+		return spec, nil
+	}
+	return profiles.NewClientProfile(id, base.GetSettings(), base.GetSettingsOrder(), base.GetPseudoHeaderOrder(),
+		base.GetConnectionFlow(), base.GetPriorities(), base.GetHeaderPriority(), base.GetStreamID(), base.GetAllowHTTP(),
+		nil, nil, 0, nil, false)
 }
 
 // Chrome writes trust anchor IDs in process-stable hash-table order. Shuffle

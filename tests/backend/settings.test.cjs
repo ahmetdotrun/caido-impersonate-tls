@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs/promises");
 const { mkdir, readFile, readdir, writeFile } = require("node:fs/promises");
 const path = require("node:path");
 const test = require("node:test");
@@ -24,6 +25,36 @@ test("serial operations retain order after a rejection", async () => {
   await assert.rejects(first, /expected/);
   assert.equal(await second, "ok");
   assert.deepEqual(order, [1, 2]);
+});
+
+test("Caido errors without errno codes allow new installs but keep unreadable settings blocked", async (t) => {
+  const { sdk, directory } = await sandbox(t);
+  const store = new SettingsStore();
+  const filename = path.join(directory, "settings.json");
+  let unreadable = false;
+  t.mock.method(fs, "readFile", async (...args) => {
+    if (unreadable)
+      throw new Error(
+        `Can't read "${filename}". Permission denied (os error 13)`,
+      );
+    try {
+      return await readFile(...args);
+    } catch (error) {
+      if (error.code === "ENOENT")
+        throw new Error(
+          `Can't read "${filename}". No such file or directory (os error 2)`,
+        );
+      throw error;
+    }
+  });
+  const initial = await store.load(sdk);
+  assert.equal(initial.defaultProfile, "chrome_157_cft_PSK");
+  assert.equal(initial.enabled, true);
+  await writeFile(filename, JSON.stringify(initial));
+  unreadable = true;
+  await assert.rejects(store.load(sdk), /Permission denied/);
+  assert.throws(() => store.get(), /Permission denied/);
+  assert.deepEqual(JSON.parse(await readFile(filename, "utf8")), initial);
 });
 
 test("concurrent settings saves remain ordered, valid and consistent with memory", async (t) => {

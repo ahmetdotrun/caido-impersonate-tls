@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { mkdir, open, readFile, rename, rm } from "fs/promises";
+import { mkdir, open, readdir, readFile, rename, rm } from "fs/promises";
 import path from "path";
 
 import type { Settings } from "shared";
@@ -13,7 +13,7 @@ const SETTINGS_FILE = "settings.json";
 const DEFAULT_SETTINGS: Settings = {
   enabled: true,
   autoStart: true,
-  defaultProfile: "chrome_152",
+  defaultProfile: "chrome_157_cft_PSK",
   headerMode: "preserve",
   maximumUploadMiB: 0,
 };
@@ -38,18 +38,22 @@ export class SettingsStore {
     const settingsPath = this.getPath(sdk);
 
     try {
-      const content = await readFile(settingsPath, "utf8");
-      this.settings = this.parse(JSON.parse(content) as unknown);
+      await mkdir(path.dirname(settingsPath), { recursive: true });
+      // Caido does not attach Node's ENOENT code to filesystem errors. An
+      // authoritative directory listing distinguishes a new installation from
+      // a present but damaged or unreadable file without parsing error text.
+      const files = await readdir(path.dirname(settingsPath));
+      this.settings = files.includes(SETTINGS_FILE)
+        ? this.parse(
+            JSON.parse(await readFile(settingsPath, "utf8")) as unknown,
+          )
+        : { ...DEFAULT_SETTINGS };
     } catch (error) {
-      if (this.isMissingFile(error)) {
-        this.settings = { ...DEFAULT_SETTINGS };
-      } else {
-        // A damaged or unreadable file is not permission to change the profile,
-        // upload policy, or enablement. Preserve the file and require repair.
-        this.settings = undefined;
-        this.loadError = `Failed to load settings: ${String(error)}`;
-        throw new Error(this.loadError);
-      }
+      // A damaged or unreadable file is not permission to change the profile,
+      // upload policy, or enablement. Preserve the file and require repair.
+      this.settings = undefined;
+      this.loadError = `Failed to load settings: ${String(error)}`;
+      throw new Error(this.loadError);
     }
 
     return this.get();
@@ -87,14 +91,6 @@ export class SettingsStore {
 
   private getPath(sdk: BackendSDK): string {
     return path.join(sdk.meta.path(), SETTINGS_FILE);
-  }
-
-  private isMissingFile(error: unknown): boolean {
-    if (typeof error !== "object" || error === null || !("code" in error)) {
-      return false;
-    }
-
-    return error.code === "ENOENT";
   }
 
   private parse(value: unknown): Settings {

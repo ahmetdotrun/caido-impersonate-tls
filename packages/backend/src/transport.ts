@@ -14,13 +14,15 @@ import path from "path";
 
 import type { Result, TransportStatus } from "shared";
 
+import { PLUGIN_VERSION } from "../../shared/src/catalog";
+
 import { SerialQueue } from "./serial";
 import type { BackendSDK } from "./types";
 
 const START_TIMEOUT_MS = 10_000;
 const STOP_TIMEOUT_MS = 5_000;
 const HEARTBEAT_INTERVAL_MS = 5_000;
-const TRANSPORT_VERSION = "0.2.5";
+const TRANSPORT_VERSION = PLUGIN_VERSION;
 const BINARY_NAME = "caido-impersonate-transport";
 
 type ReadyEvent = {
@@ -64,6 +66,7 @@ export class TransportService {
   public constructor(
     private readonly sdk: BackendSDK,
     private readonly onRequestEvent: (event: TransportRequestEvent) => void,
+    private readonly onExit: (reason: string) => void = () => {},
   ) {
     this.status = {
       state: "idle",
@@ -326,6 +329,12 @@ export class TransportService {
       });
 
       child.once("error", (error) => {
+        // Caido can report a failed spawn without emitting close. No process
+        // exists when startup failed before a PID was assigned.
+        if (!settled && child.pid === undefined && this.child === child) {
+          this.child = undefined;
+          this.token = undefined;
+        }
         settle(() => reject(error));
       });
 
@@ -344,6 +353,12 @@ export class TransportService {
 
         const exitReason =
           code === null ? `signal ${String(signal)}` : `code ${code}`;
+
+        this.onExit(
+          this.status.state === "stopping"
+            ? "Transport stopped before the request completed"
+            : `Transport exited with ${exitReason} before the request completed`,
+        );
 
         if (wasStarting) {
           settle(() =>

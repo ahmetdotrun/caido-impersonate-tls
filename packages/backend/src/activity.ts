@@ -1,9 +1,10 @@
 import type { ActivityEntry } from "shared";
 
+import { MAX_ACTIVITY_ENTRIES } from "../../shared/src/activity";
+
 import type { TransportRequestEvent } from "./transport";
 import type { BackendSDK } from "./types";
 
-const MAX_ACTIVITY_ENTRIES = 250;
 const MAX_ERROR_LENGTH = 500;
 
 type BeginActivity = Pick<
@@ -26,6 +27,7 @@ export class ActivityStore {
     const entry: ActivityEntry = {
       ...input,
       id: `${Date.now().toString(36)}-${this.sequence.toString(36)}`,
+      sequence: this.sequence,
       startedAt: Date.now(),
       state: "routed",
     };
@@ -40,7 +42,7 @@ export class ActivityStore {
 
   public complete(event: TransportRequestEvent): void {
     const entry = this.entries.find((candidate) => candidate.id === event.id);
-    if (entry === undefined) {
+    if (entry === undefined || entry.state !== "routed") {
       return;
     }
 
@@ -61,7 +63,7 @@ export class ActivityStore {
 
   public fail(id: string, error: string): void {
     const entry = this.entries.find((candidate) => candidate.id === id);
-    if (entry === undefined) {
+    if (entry === undefined || entry.state !== "routed") {
       return;
     }
 
@@ -75,6 +77,17 @@ export class ActivityStore {
   public clear(): void {
     this.entries = [];
     this.sdk.api.send("activity:cleared");
+  }
+
+  public interruptPending(reason: string): void {
+    for (const entry of this.entries) {
+      if (entry.state !== "routed") continue;
+      entry.state = "interrupted";
+      entry.completedAt = Date.now();
+      entry.durationMs = entry.completedAt - entry.startedAt;
+      entry.error = this.truncate(reason);
+      this.publish(entry);
+    }
   }
 
   private truncate(error: string): string {

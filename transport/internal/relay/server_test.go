@@ -35,6 +35,38 @@ func TestServerRejectsInvalidToken(t *testing.T) {
 	}
 }
 
+func TestCapacityRejectionReportsAuthenticatedTrace(t *testing.T) {
+	events := make(chan []byte, 1)
+	server := NewServer(testToken, log.New(io.Discard, "", 0), log.New(channelWriter(events), "", 0))
+	serverSide, clientSide := net.Pipe()
+	defer clientSide.Close()
+	_ = clientSide.SetDeadline(time.Now().Add(2 * time.Second))
+	go server.rejectCapacity(serverSide)
+	if _, err := io.WriteString(clientSide, privateRequest(testToken, "fixture.test", "443", "/")); err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.ReadResponse(bufio.NewReader(clientSide), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != 503 {
+		t.Fatalf("status = %d", response.StatusCode)
+	}
+	select {
+	case line := <-events:
+		var event requestEvent
+		if err := json.Unmarshal(line, &event); err != nil {
+			t.Fatal(err)
+		}
+		if event.ID != "test-1" || event.Outcome != "failed" {
+			t.Fatalf("event = %+v", event)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("overload did not report a terminal activity event")
+	}
+}
+
 func TestServerAuthenticatesBeforeReadingBody(t *testing.T) {
 	serverSide, clientSide := net.Pipe()
 	server := NewServer("correct-token-with-at-least-32-bytes", log.New(io.Discard, "", 0))

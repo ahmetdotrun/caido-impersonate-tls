@@ -13,8 +13,9 @@ import Tabs from "primevue/tabs";
 import Tag from "primevue/tag";
 import ToggleSwitch from "primevue/toggleswitch";
 import type { Profile, Result, Settings, TransportStatus } from "shared";
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 
+import { TLS_CLIENT_VERSION } from "../../../shared/src/catalog";
 import { useSDK } from "../plugins/sdk";
 
 import ActivityPanel from "./ActivityPanel.vue";
@@ -32,6 +33,8 @@ const loading = ref(true);
 const saving = ref(false);
 const action = ref<"start" | "stop">();
 const error = ref("");
+const settingsUnavailable = ref(false);
+const repairing = ref(false);
 
 function unwrap<T>(result: Result<T>): T {
   if (result.kind === "Error") {
@@ -59,6 +62,10 @@ const profileOptions = computed(() =>
   })),
 );
 
+const selectedProfile = computed(() =>
+  profiles.value.find((profile) => profile.id === defaultProfile.value),
+);
+
 const statusSeverity = computed(() => {
   switch (status.value?.state) {
     case "running":
@@ -83,13 +90,16 @@ const statusDetail = computed(() => {
 
 const canStart = computed(
   () =>
+    status.value !== undefined &&
     action.value === undefined &&
+    status.value.state !== "unsupported" &&
     status.value?.state !== "running" &&
     status.value?.state !== "starting",
 );
 
 const canStop = computed(
   () =>
+    status.value !== undefined &&
     action.value === undefined &&
     status.value?.state !== "idle" &&
     status.value?.state !== "stopping",
@@ -104,14 +114,35 @@ async function load(): Promise<void> {
       sdk.backend.getSettings(),
       sdk.backend.getProfiles(),
     ]);
-    profiles.value = unwrap(profilesResult);
-    applySettings(unwrap(settingsResult));
-    applyStatus(unwrap(statusResult));
+    const errors: string[] = [];
+    if (statusResult.kind === "Ok") applyStatus(statusResult.value);
+    else errors.push(statusResult.error);
+    if (profilesResult.kind === "Ok") profiles.value = profilesResult.value;
+    else errors.push(profilesResult.error);
+    settingsUnavailable.value = settingsResult.kind === "Error";
+    if (settingsResult.kind === "Ok") applySettings(settingsResult.value);
+    else errors.push(settingsResult.error);
+    error.value = errors.join("; ");
   } catch (cause) {
     error.value = String(cause);
   } finally {
     loading.value = false;
   }
+}
+
+function prepareRepair(): void {
+  const profile = profiles.value[0];
+  if (profile === undefined) return;
+  applySettings({
+    enabled: false,
+    autoStart: false,
+    defaultProfile: profile.id,
+    headerMode: "preserve",
+    maximumUploadMiB: 0,
+  });
+  repairing.value = true;
+  settingsUnavailable.value = false;
+  error.value = "";
 }
 
 async function startTransport(): Promise<void> {
@@ -157,6 +188,7 @@ async function save(): Promise<void> {
       }),
     );
     applySettings(updated);
+    repairing.value = false;
     sdk.window.showToast("Impersonate TLS settings saved", {
       variant: "success",
     });
@@ -167,8 +199,12 @@ async function save(): Promise<void> {
   }
 }
 
-sdk.backend.onEvent("transport:status", applyStatus);
-sdk.backend.onEvent("settings:updated", applySettings);
+const statusEvents = sdk.backend.onEvent("transport:status", applyStatus);
+const settingsEvents = sdk.backend.onEvent("settings:updated", applySettings);
+onBeforeUnmount(() => {
+  statusEvents.stop();
+  settingsEvents.stop();
+});
 onMounted(() => void load());
 </script>
 
@@ -224,6 +260,27 @@ onMounted(() => void load());
                     :closable="false"
                   >
                     {{ error }}
+                  </Message>
+
+                  <Message
+                    v-if="settingsUnavailable"
+                    severity="warn"
+                    :closable="false"
+                  >
+                    Settings could not be loaded. Routing stays blocked until
+                    you save valid settings.
+                    <Button
+                      label="Prepare replacement settings"
+                      class="ml-2"
+                      size="small"
+                      :disabled="profiles.length === 0"
+                      @click="prepareRepair"
+                    />
+                  </Message>
+                  <Message v-if="repairing" severity="warn" :closable="false">
+                    Review these replacement settings, then save to repair the
+                    file. Shaping and automatic startup are disabled in this
+                    draft.
                   </Message>
 
                   <div class="flex items-center gap-4">
@@ -339,11 +396,30 @@ onMounted(() => void load());
                         :options="profileOptions"
                         option-label="label"
                         option-value="value"
+                        filter
                         :disabled="loading"
                         class="w-full"
                       />
                     </div>
                   </div>
+
+                  <Message
+                    v-if="selectedProfile"
+                    severity="secondary"
+                    :closable="false"
+                  >
+                    <template v-if="selectedProfile.verifiedBuilds?.length">
+                      Measured builds:
+                      {{ selectedProfile.verifiedBuilds.join(", ") }}.
+                      {{ selectedProfile.verification }}
+                    </template>
+                    <template v-else>
+                      Upstream tls-client {{ TLS_CLIENT_VERSION }} snapshot.
+                      Parity with your browser build has not been verified here.
+                    </template>
+                    Headers are preserved; keep User-Agent and Client Hints
+                    aligned with this profile.
+                  </Message>
 
                   <Divider />
 

@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
-const { once } = require("node:events");
+const childProcess = require("node:child_process");
+const { EventEmitter, once } = require("node:events");
 const { setTimeout: delay } = require("node:timers/promises");
 const test = require("node:test");
 const {
@@ -8,7 +9,12 @@ const {
 const { sandbox } = require("./helpers.cjs");
 
 async function serviceFixture(t, sdk) {
-  const service = new TransportService(sdk, () => {});
+  const exits = [];
+  const service = new TransportService(
+    sdk,
+    () => {},
+    (reason) => exits.push(reason),
+  );
   const children = [];
   const waitUntilReady = service.waitUntilReady.bind(service);
   service.waitUntilReady = (child) => {
@@ -29,7 +35,7 @@ async function serviceFixture(t, sdk) {
     }
     await service.stop();
   });
-  return { service, children };
+  return { service, children, exits };
 }
 
 test("overlapping stop/start waits for exit and retains the new process", async (t) => {
@@ -102,6 +108,36 @@ test("a failed start does not block a corrected start", async (t) => {
 });
 
 test(
+  "a spawn error without close cleans up and permits a corrected start",
+  { timeout: 3000 },
+  async (t) => {
+    const { sdk } = await sandbox(t);
+    const service = new TransportService(sdk, () => {});
+    const failedChild = new EventEmitter();
+    failedChild.kill = () => assert.fail("No process exists to kill");
+    t.after(async () => {
+      if (service.child === failedChild) service.child = undefined;
+      await service.stop();
+    });
+    const mocked = t.mock.method(childProcess, "spawn", () => {
+      process.nextTick(() =>
+        failedChild.emit("error", new Error("Permission denied")),
+      );
+      return failedChild;
+    });
+    const failed = await service.start();
+    assert.equal(failed.kind, "Error");
+    assert.equal(failed.error, "Error: Permission denied");
+    assert.equal(service.child, undefined);
+    assert.equal(service.runtimeFiles, undefined);
+    assert.equal(service.heartbeatTimer, undefined);
+    assert.equal(service.getConnectionDetails(), undefined);
+    mocked.mock.restore();
+    assert.equal((await service.start()).value.state, "running");
+  },
+);
+
+test(
   "stop waits for close after escalation to SIGKILL",
   { timeout: 10_000 },
   async (t) => {
@@ -126,7 +162,7 @@ test(
 
 test("unexpected exit clears connection details and permits restart", async (t) => {
   const { sdk } = await sandbox(t);
-  const { service, children } = await serviceFixture(t, sdk);
+  const { service, children, exits } = await serviceFixture(t, sdk);
   assert.equal((await service.start()).kind, "Ok");
   const current = children[0];
   const closed = once(current.child, "close");
@@ -134,6 +170,10 @@ test("unexpected exit clears connection details and permits restart", async (t) 
   await closed;
   assert.equal(service.getStatus().state, "error");
   assert.equal(service.getConnectionDetails(), undefined);
+  assert.match(
+    exits[0],
+    /exited with signal SIGKILL before the request completed/,
+  );
   assert.equal((await service.start()).value.state, "running");
   assert.notEqual(service.child, current.child);
 });

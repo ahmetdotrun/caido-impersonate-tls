@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/textproto"
 	"sync"
 	"time"
 
@@ -94,12 +95,34 @@ func (server *Server) Serve(ctx context.Context, listener net.Listener) error {
 				server.handleContext(ctx, connection)
 			}()
 		default:
-			_ = connection.SetWriteDeadline(time.Now().Add(time.Second))
-			writeError(connection, http.StatusServiceUnavailable, "transport connection capacity exhausted")
-			server.logger.Print("transport connection capacity exhausted")
-			_ = connection.Close()
+			server.rejectCapacity(connection)
 		}
 	}
+}
+
+// Rejections still authenticate and identify promptly sent headers so Activity
+// receives a terminal result. This reader is synchronous and bounded; overload
+// cannot create additional worker goroutines or consume upload payloads.
+func (server *Server) rejectCapacity(connection net.Conn) {
+	defer connection.Close()
+	_ = connection.SetDeadline(time.Now().Add(time.Second))
+	request, err := readIncomingHead(bufio.NewReaderSize(connection, 64*1024))
+	if err != nil {
+		writeError(connection, http.StatusBadRequest, "invalid request during transport overload")
+		return
+	}
+	metadata, err := request.metadata()
+	if err != nil {
+		writeError(connection, http.StatusBadRequest, err.Error())
+		return
+	}
+	if subtle.ConstantTimeCompare([]byte(metadata.Token), []byte(server.token)) != 1 {
+		writeError(connection, http.StatusForbidden, "invalid transport token")
+		return
+	}
+	message := "transport connection capacity exhausted"
+	server.logActivity(requestEvent{Event: "request", ID: metadata.Trace, Outcome: "failed", Error: message})
+	writeError(connection, http.StatusServiceUnavailable, message)
 }
 
 func (server *Server) handle(connection net.Conn) {
@@ -139,7 +162,7 @@ func (server *Server) handleContext(parent context.Context, connection net.Conn)
 	}
 	_ = connection.SetDeadline(time.Time{})
 	writer := idleWriter{Conn: connection, timeout: server.limits.idleTimeout}
-	warning := profileCoherenceWarning(metadata.Profile, request.firstHeader("User-Agent"))
+	warning := profileCoherenceWarning(metadata.Profile, request)
 
 	startedAt := time.Now()
 	ctx, cancel := context.WithCancelCause(parent)
@@ -183,6 +206,9 @@ func (server *Server) handleContext(parent context.Context, connection net.Conn)
 	}
 	requestContext := httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
 		WroteRequest: func(httptrace.WroteRequestInfo) { watch.reset(server.limits.headerTimeout) },
+		Got1xxResponse: func(code int, headers textproto.MIMEHeader) error {
+			return writeInformational(writer, code, headers)
+		},
 	})
 	response, err := forwardContext(requestContext, server.clients, request, metadata)
 	if err != nil {
