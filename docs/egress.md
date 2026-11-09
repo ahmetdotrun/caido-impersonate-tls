@@ -2,7 +2,7 @@
 
 [Back to README](../README.md)
 
-This feature is available in current source builds; the published v0.3.0 ZIP predates it.
+Available in v0.4.0 and later.
 
 Add `X-Morpheus-Egress: office` to choose an upstream proxy by name. Names are caller-defined, case-sensitive labels, independent of Caido request colors and TLS profile names. Spaces and Unicode are supported; control characters and surrounding whitespace are rejected.
 

@@ -8,8 +8,8 @@ const config: KnipConfig = {
         "tests/browser/install.mjs",
         "tests/caido/restart.mjs",
       ],
-      // Built from transport/cmd/fingerprint by tests/caido/Dockerfile.
-      ignoreBinaries: ["fingerprint"],
+      // fingerprint is built by the Caido fixture; jq is provided by the release runner.
+      ignoreBinaries: ["fingerprint", "jq"],
     },
     "packages/shared": {
       project: ["src/**/*.ts"],
