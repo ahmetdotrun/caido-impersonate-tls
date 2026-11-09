@@ -15,6 +15,8 @@ The backend uses Caido's `onUpstream` hook to route matching requests to a bundl
 
 The helper binds to an ephemeral port on `127.0.0.1` and authenticates requests with a random 256-bit token. It removes private routing headers before forwarding and verifies target certificates. If shaping is enabled and the helper is unavailable, matching requests fail rather than falling back to an unshaped connection.
 
+A separate reject-only instance of the bundled helper remains available while forwarding is stopped. It only returns HTTP 503, never opens origin connections, and keeps Caido's exception fallback from bypassing the plugin.
+
 Before execution, the backend verifies the binary against its packaged SHA-256 checksum and installs it atomically with owner-only permissions. A one-time token file and an ownership heartbeat manage the process. Reloading the same version does not overwrite an executing binary. There is no runtime downloader or updater. See the [security policy](../SECURITY.md) for the runtime boundary.
 
 ## Settings
@@ -57,7 +59,7 @@ Uploads and responses stream with bounded relay memory. Active transfers have no
 
 Queue or client-pool exhaustion returns HTTP 503. Overload is reported in Activity when the request can be authenticated and identified. WebSocket lifetimes remain open-ended.
 
-Clients are pooled by origin, profile, and HTTP/WebSocket mode. A stalled TLS handshake cannot hold up unrelated origins. Only idle clients can be evicted; response bodies and WebSockets retain their client lease until close.
+Clients are pooled by origin, TLS profile, egress name/proxy, and HTTP/WebSocket mode. Egress names never share connections or TLS session caches. A stalled TLS handshake cannot hold up unrelated origins. Only idle clients can be evicted; response bodies and WebSockets retain their client lease until close. See [named egress profiles](egress.md) for backend configuration and failure behavior.
 
 Closing a Caido-to-relay connection or stopping the helper cancels its upstream work. Queued bodyless HTTP requests can also release their position on disconnect. Queued uploads and WebSocket handshakes retain the bounded queue timeout because disconnect monitoring must not consume unread payload. Browser-disconnect propagation depends on Caido.
 
@@ -66,6 +68,8 @@ Closing a Caido-to-relay connection or stopping the helper cancels its upstream 
 Activity is kept in memory, capped at 250 entries. It shows target host, method, profile, routing state, response status, protocol, duration, and identity warnings. Stopping or losing the helper marks pending entries as interrupted.
 
 Paths, queries, headers, bodies, cookies, and transport tokens are not recorded in Activity.
+
+Egress proxy credentials are stored owner-only and excluded from logs, events, Activity, and backend responses. Proxied request errors use fixed messages so library or proxy errors cannot reflect credentials.
 
 ## Credits and licenses
 

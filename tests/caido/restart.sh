@@ -56,6 +56,12 @@ for iteration in 1 2; do
   probe login
   probe assert-shaped
 done
+probe configure-egress
+probe assert-egress
+probe assert-stopped-egress
+docker restart --timeout 2 "$caido" >/dev/null
+probe login
+probe assert-egress
 probe disable-rule
 docker restart --timeout 2 "$caido" >/dev/null
 probe login
@@ -65,6 +71,8 @@ probe disable-shaping
 docker restart --timeout 2 "$caido" >/dev/null
 probe login
 probe assert-disabled-shaping
+probe assert-disabled-egress
 probe enable-shaping
 probe assert-shaped
+docker logs "$caido" 2>&1 | docker exec --interactive "$fixture" node /fixture/restart.mjs assert-redacted-logs
 printf '%s\n' 'Caido 0.59.0 persistent restart regression passed.'

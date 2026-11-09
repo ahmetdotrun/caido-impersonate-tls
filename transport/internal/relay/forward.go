@@ -20,6 +20,7 @@ var internalHeaderNames = map[string]struct{}{
 	strings.ToLower(headerProfile): {},
 	strings.ToLower(headerTrace):   {},
 	strings.ToLower(headerMaxBody): {},
+	strings.ToLower(headerEgress):  {},
 }
 
 var fixedHopHeaders = map[string]struct{}{
@@ -39,6 +40,10 @@ func forward(pool *clientPool, request *incomingRequest, metadata routeMetadata)
 }
 
 func forwardContext(ctx context.Context, pool *clientPool, request *incomingRequest, metadata routeMetadata) (*fhttp.Response, error) {
+	egress, err := pool.egress.resolve(request.headerValues(headerEgress))
+	if err != nil {
+		return nil, err
+	}
 	path, err := request.targetPath()
 	if err != nil {
 		return nil, errors.New("invalid request target")
@@ -129,14 +134,23 @@ func forwardContext(ctx context.Context, pool *clientPool, request *incomingRequ
 		upstream.Header[fhttp.HeaderOrderKey] = headerOrder
 	}
 
-	client, release, err := pool.acquire(metadata.Profile, metadata.Scheme+"://"+authority, websocketUpgrade)
+	client, release, err := pool.acquire(metadata.Profile, metadata.Scheme+"://"+authority, websocketUpgrade, egress)
 	if err != nil {
+		if egress.name != "" && !errors.Is(err, errClientCapacity) {
+			return nil, errEgressRequest
+		}
 		return nil, err
 	}
 
 	response, err := client.Do(upstream)
 	if err != nil {
 		release()
+		if errors.Is(err, errBodyTooLarge) {
+			return nil, errBodyTooLarge
+		}
+		if egress.name != "" {
+			return nil, errEgressRequest
+		}
 		var urlError *url.Error
 		if errors.As(err, &urlError) {
 			return nil, fmt.Errorf("upstream request: %w", urlError.Err)

@@ -33,6 +33,8 @@ func main() {
 	listenAddress := flag.String("listen", "127.0.0.1:0", "private listen address")
 	tokenFile := flag.String("token-file", "", "path to the one-time transport token")
 	ownerFile := flag.String("owner-file", "", "path to the plugin ownership heartbeat")
+	egressFile := flag.String("egress-file", "", "path to private named egress configuration")
+	rejectOnly := flag.Bool("reject-only", false, "serve HTTP 503 without forwarding any requests")
 	flag.Parse()
 	if *showVersion {
 		fmt.Println(version)
@@ -94,6 +96,10 @@ func main() {
 		log.New(os.Stderr, "transport: ", 0),
 		log.New(os.Stdout, "", 0),
 	)
+	server.SetEgressFile(*egressFile)
+	if *rejectOnly {
+		server.SetRejectOnly()
+	}
 	if err := server.Serve(ctx, listener); err != nil {
 		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
 		os.Exit(1)

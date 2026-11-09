@@ -6,6 +6,15 @@ import http from "node:http";
 import { createInterface } from "node:readline";
 import tls from "node:tls";
 
+import {
+  startEgressFixture,
+  configureEgress,
+  testEgress,
+  assertRedactedLogs,
+  testDisabledEgress,
+  testStoppedEgress,
+} from "./egress.mjs";
+
 const base = "http://127.0.0.1:8080";
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const fields = "id enabled rank allowlist denylist plugin { id }";
@@ -247,6 +256,7 @@ async function assertCapture(host, shaped) {
 
 const action = process.argv[2];
 if (action === "serve") {
+  await startEgressFixture();
   const child = spawn("fingerprint", ["--ca-file", "/tmp/origin-ca.pem"], {
     stdio: ["ignore", "pipe", "inherit"],
   });
@@ -267,6 +277,8 @@ if (action === "serve") {
   );
 } else if (action === "login") {
   await login();
+} else if (action === "assert-redacted-logs") {
+  await assertRedactedLogs();
 } else if (action === "setup") {
   await login();
   const form = new FormData();
@@ -335,7 +347,15 @@ if (action === "serve") {
 } else {
   ({ token } = JSON.parse(await readFile("/tmp/auth.json")));
   state = JSON.parse(await readFile("/tmp/state.json"));
-  if (action === "enable-rule" || action === "disable-rule") {
+  if (action === "configure-egress") {
+    await configureEgress(rpc);
+  } else if (action === "assert-egress") {
+    await testEgress(rpc, graphql);
+  } else if (action === "assert-disabled-egress") {
+    await testDisabledEgress();
+  } else if (action === "assert-stopped-egress") {
+    await testStoppedEgress(rpc);
+  } else if (action === "enable-rule" || action === "disable-rule") {
     await toggleRule(action === "enable-rule");
   } else if (action === "enable-shaping" || action === "disable-shaping") {
     const settings = await rpc("getSettings");

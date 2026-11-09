@@ -23,6 +23,7 @@ type clientKey struct {
 	profile   string
 	origin    string
 	websocket bool
+	egress    egressRoute
 }
 
 type pooledClient struct {
@@ -37,15 +38,16 @@ type clientPool struct {
 	capacity int
 	clock    uint64
 	closed   bool
-	create   func(string, bool) (tls_client.HttpClient, error)
+	create   func(string, bool, string) (tls_client.HttpClient, error)
+	egress   egressStore
 }
 
 func newClientPool() *clientPool {
 	return &clientPool{
 		clients:  make(map[clientKey]*pooledClient),
 		capacity: maxPooledClients,
-		create: func(profile string, websocket bool) (tls_client.HttpClient, error) {
-			return newProfileClient(profile, websocket, nil)
+		create: func(profile string, websocket bool, proxy string) (tls_client.HttpClient, error) {
+			return newProfileClient(profile, websocket, nil, proxy)
 		},
 	}
 }
@@ -53,7 +55,7 @@ func newClientPool() *clientPool {
 // tls-client serializes initial TLS negotiation inside a client. Partition by
 // origin so a slow site cannot hold the transport lock for unrelated traffic.
 // A lease lasts through response-body close (or the WebSocket lifetime).
-func (pool *clientPool) acquire(profileName, origin string, websocket bool) (tls_client.HttpClient, func(), error) {
+func (pool *clientPool) acquire(profileName, origin string, websocket bool, egress egressRoute) (tls_client.HttpClient, func(), error) {
 	pool.mu.Lock()
 	var evicted tls_client.HttpClient
 	defer func() {
@@ -65,7 +67,7 @@ func (pool *clientPool) acquire(profileName, origin string, websocket bool) (tls
 	if pool.closed {
 		return nil, nil, errors.New("transport client pool is closed")
 	}
-	key := clientKey{profileName, strings.ToLower(origin), websocket}
+	key := clientKey{profileName, strings.ToLower(origin), websocket, egress}
 	entry := pool.clients[key]
 	if entry == nil {
 		if len(pool.clients) >= pool.capacity {
@@ -82,7 +84,7 @@ func (pool *clientPool) acquire(profileName, origin string, websocket bool) (tls
 			delete(pool.clients, oldestKey)
 			evicted = oldest.client
 		}
-		client, err := pool.create(profileName, websocket)
+		client, err := pool.create(profileName, websocket, egress.proxy)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -117,7 +119,7 @@ func (pool *clientPool) close() {
 	}
 }
 
-func newProfileClient(profileName string, forceHTTP1 bool, roots *x509.CertPool) (tls_client.HttpClient, error) {
+func newProfileClient(profileName string, forceHTTP1 bool, roots *x509.CertPool, proxyURL string) (tls_client.HttpClient, error) {
 	metadata, advertised := profileMetadata(profileName)
 	if !advertised {
 		return nil, fmt.Errorf("unknown transport profile %q", profileName)
@@ -169,6 +171,16 @@ func newProfileClient(profileName string, forceHTTP1 bool, roots *x509.CertPool)
 		}),
 	}
 	major, _ := strconv.Atoi(metadata.Version)
+	if proxyURL != "" {
+		dialer, err := newEgressDialer(proxyURL)
+		if err != nil {
+			return nil, err
+		}
+		// Keep proxy setup bounded without imposing a whole-response timeout on
+		// downloads/streams. tls-client's built-in CONNECT timeout follows that
+		// whole-response timeout, which this relay intentionally disables.
+		options = append(options, tls_client.WithDialContext(dialer.DialContext))
+	}
 	if (strings.HasPrefix(profileName, "chrome_") && major >= 110) || strings.HasPrefix(profileName, "brave_") {
 		options = append(options, tls_client.WithRandomTLSExtensionOrder())
 	}

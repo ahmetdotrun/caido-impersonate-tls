@@ -1,6 +1,8 @@
 import type { SDK } from "caido:plugin";
 import type {
   ActivityEntry,
+  EgressProfiles,
+  EgressSummary,
   Profile,
   Result,
   Settings,
@@ -9,7 +11,9 @@ import type {
 } from "shared";
 
 import { ActivityStore } from "./activity";
+import { EgressStore } from "./egress";
 import { isKnownProfile, PROFILES } from "./profiles";
+import { RejectionService } from "./rejection";
 import { refreshUpstreamRules } from "./routing";
 import { SettingsStore } from "./settings";
 import { TransportService } from "./transport";
@@ -17,8 +21,29 @@ import type { BackendSDK } from "./types";
 import { createUpstreamHandler } from "./upstream";
 
 const settingsStore = new SettingsStore();
+const egressStore = new EgressStore();
 let transport: TransportService | undefined;
 let activity: ActivityStore | undefined;
+let rejection: RejectionService | undefined;
+
+async function setEgress(
+  sdk: BackendSDK,
+  profiles: EgressProfiles,
+): Promise<Result<EgressSummary>> {
+  try {
+    return { kind: "Ok", value: await egressStore.set(sdk, profiles) };
+  } catch (error) {
+    return { kind: "Error", error: String(error) };
+  }
+}
+
+async function getEgress(sdk: BackendSDK): Promise<Result<EgressSummary>> {
+  try {
+    return { kind: "Ok", value: await egressStore.get(sdk) };
+  } catch (error) {
+    return { kind: "Error", error: String(error) };
+  }
+}
 
 function getSettings(_sdk: BackendSDK): Result<Settings> {
   try {
@@ -134,6 +159,8 @@ async function stopTransport(
 
 export async function init(sdk: SDK<Spec>): Promise<void> {
   const backendSDK: BackendSDK = sdk;
+  await rejection?.close();
+  rejection = new RejectionService(backendSDK);
   const activityStore = new ActivityStore(backendSDK);
   activity = activityStore;
   transport = new TransportService(
@@ -150,10 +177,28 @@ export async function init(sdk: SDK<Spec>): Promise<void> {
   sdk.api.register("clearActivity", clearActivity);
   sdk.api.register("startTransport", startTransport);
   sdk.api.register("stopTransport", stopTransport);
+  sdk.api.register("set-egress", setEgress);
+  sdk.api.register("get-egress", getEgress);
 
   sdk.events.onUpstream(
-    createUpstreamHandler(transport, () => settingsStore.get(), activityStore),
+    createUpstreamHandler(
+      transport,
+      () => settingsStore.get(),
+      activityStore,
+      rejection,
+    ),
   );
+
+  try {
+    await rejection.start();
+  } catch {
+    transport.setRoutingError(
+      "Private rejection transport could not start; safe rejection is unavailable",
+    );
+    sdk.console.error(
+      "[Impersonate TLS] Private rejection transport could not start",
+    );
+  }
 
   try {
     await refreshUpstreamRules(backendSDK);
@@ -168,6 +213,14 @@ export async function init(sdk: SDK<Spec>): Promise<void> {
   } catch (error) {
     sdk.console.error(`[Impersonate TLS] ${String(error)}`);
     return;
+  }
+
+  try {
+    await egressStore.load(backendSDK);
+  } catch {
+    sdk.console.error(
+      "[Impersonate TLS] Egress configuration is unavailable; named egress requests will fail closed",
+    );
   }
 
   const settings = settingsStore.get();

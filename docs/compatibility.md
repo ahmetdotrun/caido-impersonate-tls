@@ -42,6 +42,10 @@ If refreshing fails, the backend logs the error and the plugin UI displays a war
 
 The persistent restart regression checks destination ClientHello and HTTP/2, completed Activity, preserved filters and rank, and disabled/excluded traffic. The issue was reproduced with the old ZIP and repaired by the startup refresh; this is a plugin workaround, not a change to Caido's startup order.
 
+### Upstream-hook errors
+
+Caido **0.59.0** logged a thrown upstream-hook exception and then sent the request using its own transport in a controlled test. A thrown error does not block routing in that build. The current backend instead returns a private connection serving HTTP 503 when settings cannot be read, the helper is stopped/unreachable, or a named egress request arrives while shaping is disabled. That listener never forwards requests. Restart tests verify this behavior for HTTP and WebSocket handshakes.
+
 ### Browser-facing protocol and Priority
 
 In isolated Caido **0.59.0** checks, Chrome 157 negotiated HTTP/1.1 with Caido using both network stacks. Its requests omitted the `Priority` header sent on direct HTTP/2 navigation. The destination TLS and HTTP/2 settings and remaining ordered headers matched the direct capture.

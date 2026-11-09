@@ -72,6 +72,7 @@ test("helper readiness, shaping enablement and Activity remain distinct through 
   assert.equal((await handlers.startTransport(sdk)).value.state, "running");
   const headers = new Map();
   const spec = {
+    getHeader: () => undefined,
     getMethod: () => "GET",
     setHeader: (name, value) => headers.set(name, value),
   };
@@ -82,6 +83,14 @@ test("helper readiness, shaping enablement and Activity remain distinct through 
     toSpec: () => spec,
   };
   assert.equal(await upstream(sdk, request), undefined);
+  assert(
+    (
+      await upstream(sdk, {
+        ...request,
+        toSpec: () => ({ ...spec, getHeader: () => ["office"] }),
+      })
+    ).connection,
+  );
   assert.deepEqual(handlers.getActivity(sdk), { kind: "Ok", value: [] });
 
   const configured = await handlers.updateSettings(sdk, {
@@ -109,6 +118,46 @@ test("helper readiness, shaping enablement and Activity remain distinct through 
       .getActivity(sdk)
       .value.every((entry) => entry.state === "interrupted"),
   );
+});
+
+test("egress backend calls are reachable by their plugin-call names and never return credentials", async (t) => {
+  const { sdk } = await sandbox(t);
+  const handlers = {};
+  const messages = [];
+  sdk.api.register = (name, handler) => {
+    handlers[name] = handler;
+  };
+  sdk.events = { onUpstream() {} };
+  sdk.console = {
+    log: (message) => messages.push(message),
+    error: (message) => messages.push(message),
+  };
+  await writeFile(
+    path.join(sdk.meta.path(), "settings.json"),
+    JSON.stringify({
+      enabled: false,
+      autoStart: false,
+      defaultProfile: "chrome_157_cft_PSK",
+      headerMode: "preserve",
+      maximumUploadMiB: 0,
+    }),
+  );
+  await init(sdk);
+  const configured = await handlers["set-egress"](sdk, {
+    office: {
+      proxy: "http://private-user:private-password@proxy.invalid:8080",
+    },
+  });
+  assert.deepEqual(configured, {
+    kind: "Ok",
+    value: { office: { proxy: "http://proxy.invalid:8080" } },
+  });
+  assert.deepEqual(await handlers["get-egress"](sdk), configured);
+  const invalid = await handlers["set-egress"](sdk, {
+    bad: { proxy: "http://private-user:private-password@" },
+  });
+  assert.equal(invalid.kind, "Error");
+  assert(!JSON.stringify([configured, invalid, messages]).includes("private-"));
 });
 
 test("rule refresh runs after hook registration and exposes failures beside helper status", async (t) => {

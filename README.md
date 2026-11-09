@@ -31,6 +31,7 @@ Caido Proxy / Replay / Automate / Workflows
 
 - **86 profiles** covering Chrome, Brave, Firefox, Safari, Opera, OkHttp, and application snapshots.
 - HTTPS with HTTP/2 or HTTP/1.1, plain HTTP, and WebSockets.
+- [Named egress profiles](docs/egress.md) for authenticated HTTP/SOCKS5 proxies, with isolated connections and TLS sessions.
 - Activity showing the selected profile, response status, protocol, duration, and identity warnings.
 - A bundled transport that starts automatically, verifies target certificates, and blocks matching requests if it becomes unavailable.
 

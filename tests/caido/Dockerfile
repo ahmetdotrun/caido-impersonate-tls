@@ -10,6 +10,6 @@ RUN --network=none --mount=type=cache,target=/go/pkg/mod \
 
 FROM node@sha256:752ea8a2f758c34002a0461bd9f1cee4f9a3c36d48494586f60ffce1fc708e0e
 COPY --from=origin /out/fingerprint /usr/local/bin/fingerprint
-COPY tests/caido/restart.mjs /fixture/restart.mjs
+COPY tests/caido/*.mjs /fixture/
 USER node
 CMD ["node", "/fixture/restart.mjs", "serve"]

@@ -3,6 +3,7 @@ const childProcess = require("node:child_process");
 const { EventEmitter, once } = require("node:events");
 const { setTimeout: delay } = require("node:timers/promises");
 const test = require("node:test");
+const http = require("node:http");
 const {
   TransportService,
 } = require("../../.cache/backend-tests/packages/backend/src/transport.js");
@@ -37,6 +38,44 @@ async function serviceFixture(t, sdk) {
   });
   return { service, children, exits };
 }
+
+test("reject-only companion serves HTTP 503 without routing metadata and never publishes forwarding status", async (t) => {
+  const { sdk, events } = await sandbox(t);
+  const service = new TransportService(
+    sdk,
+    () => {},
+    () => {},
+    true,
+  );
+  t.after(() => service.stop());
+  assert.equal((await service.start()).value.state, "running");
+  const details = service.getConnectionDetails();
+  assert(details);
+  const response = await new Promise((resolve, reject) => {
+    const request = http.get(
+      `http://127.0.0.1:${details.port}/`,
+      { agent: false },
+      (response) => {
+        let body = "";
+        response.on("data", (chunk) => {
+          body += chunk;
+        });
+        response.on("error", reject);
+        response.on("end", () =>
+          resolve({ status: response.statusCode, body }),
+        );
+      },
+    );
+    request.setTimeout(3000, () =>
+      request.destroy(new Error("Rejection response timed out")),
+    );
+    request.on("error", reject);
+  });
+  assert.equal(response.status, 503);
+  assert.match(response.body, /direct fallback is disabled/);
+  await service.stop();
+  assert.deepEqual(events, []);
+});
 
 test("overlapping stop/start waits for exit and retains the new process", async (t) => {
   const { sdk } = await sandbox(t);

@@ -31,7 +31,7 @@ func TestBundledProfilesAreAvailable(t *testing.T) {
 		"safari_ios_26_0",
 		"okhttp4_android_13",
 	} {
-		_, release, err := pool.acquire(profile, "http://fixture.test:80", false)
+		_, release, err := pool.acquire(profile, "http://fixture.test:80", false, egressRoute{})
 		if err != nil {
 			t.Fatalf("profile %q is unavailable: %v", profile, err)
 		}
@@ -63,8 +63,8 @@ func TestVerifiedHTTPSWithHTTP1AndHTTP2Origins(t *testing.T) {
 			roots.AddCert(target.Certificate())
 			pool := newClientPool()
 			defer pool.close()
-			pool.create = func(profile string, websocket bool) (tls_client.HttpClient, error) {
-				return newProfileClient(profile, websocket, roots)
+			pool.create = func(profile string, websocket bool, proxy string) (tls_client.HttpClient, error) {
+				return newProfileClient(profile, websocket, roots, proxy)
 			}
 			targetURL, _ := url.Parse(target.URL)
 			host, port, _ := net.SplitHostPort(targetURL.Host)
@@ -86,7 +86,7 @@ func TestVerifiedHTTPSWithHTTP1AndHTTP2Origins(t *testing.T) {
 func TestClientPoolPartitionsOriginsAndProtocols(t *testing.T) {
 	pool := newClientPool()
 	defer pool.close()
-	first, release, err := pool.acquire("chrome_152_cft", "https://one.test:443", false)
+	first, release, err := pool.acquire("chrome_152_cft", "https://one.test:443", false, egressRoute{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestClientPoolPartitionsOriginsAndProtocols(t *testing.T) {
 		{"chrome_152_cft", "https://one.test:443", true, false},
 		{"chrome_152", "https://one.test:443", false, false},
 	} {
-		client, release, err := pool.acquire(test.profile, test.origin, test.websocket)
+		client, release, err := pool.acquire(test.profile, test.origin, test.websocket, egressRoute{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -115,27 +115,27 @@ func TestClientPoolEvictsOnlyIdleClients(t *testing.T) {
 	pool := newClientPool()
 	defer pool.close()
 	pool.capacity = 2
-	first, releaseFirst, err := pool.acquire("chrome_152_cft", "https://one.test:443", false)
+	first, releaseFirst, err := pool.acquire("chrome_152_cft", "https://one.test:443", false, egressRoute{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer releaseFirst()
-	_, releaseSecond, err := pool.acquire("chrome_152_cft", "https://two.test:443", false)
+	_, releaseSecond, err := pool.acquire("chrome_152_cft", "https://two.test:443", false, egressRoute{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer releaseSecond()
-	if _, _, err := pool.acquire("chrome_152_cft", "https://three.test:443", false); !errors.Is(err, errClientCapacity) {
+	if _, _, err := pool.acquire("chrome_152_cft", "https://three.test:443", false, egressRoute{}); !errors.Is(err, errClientCapacity) {
 		t.Fatalf("active clients must not be evicted: %v", err)
 	}
 	releaseSecond()
 	releaseSecond() // Closing a body twice must not make its lease negative.
-	_, releaseThird, err := pool.acquire("chrome_152_cft", "https://three.test:443", false)
+	_, releaseThird, err := pool.acquire("chrome_152_cft", "https://three.test:443", false, egressRoute{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer releaseThird()
-	stillFirst, releaseAgain, err := pool.acquire("chrome_152_cft", "https://one.test:443", false)
+	stillFirst, releaseAgain, err := pool.acquire("chrome_152_cft", "https://one.test:443", false, egressRoute{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +144,7 @@ func TestClientPoolEvictsOnlyIdleClients(t *testing.T) {
 		t.Fatal("eviction replaced an active client or exceeded the bound")
 	}
 	pool.close()
-	if _, _, err := pool.acquire("chrome_152_cft", "https://one.test:443", false); err == nil {
+	if _, _, err := pool.acquire("chrome_152_cft", "https://one.test:443", false, egressRoute{}); err == nil {
 		t.Fatal("closed pool accepted a new lease")
 	}
 }
@@ -162,11 +162,11 @@ func TestForwardHoldsClientLeaseUntilBodyCloses(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer response.Body.Close()
-	if _, _, err := pool.acquire("chrome_152_cft", "https://other.test:443", false); !errors.Is(err, errClientCapacity) {
+	if _, _, err := pool.acquire("chrome_152_cft", "https://other.test:443", false, egressRoute{}); !errors.Is(err, errClientCapacity) {
 		t.Fatalf("open body lost its lease: %v", err)
 	}
 	_ = response.Body.Close()
-	_, release, err := pool.acquire("chrome_152_cft", "https://other.test:443", false)
+	_, release, err := pool.acquire("chrome_152_cft", "https://other.test:443", false, egressRoute{})
 	if err != nil {
 		t.Fatalf("closed body retained its lease: %v", err)
 	}

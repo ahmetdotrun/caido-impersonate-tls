@@ -21,6 +21,11 @@ export type TransportStatus = {
 
 export type HeaderMode = "preserve" | "fill" | "enforce";
 
+export type EgressProfile = { proxy: string };
+export type EgressProfiles = Record<string, EgressProfile>;
+// The proxy URL in a summary never contains user information.
+export type EgressSummary = Record<string, { proxy: string }>;
+
 export type Settings = {
   enabled: boolean;
   autoStart: boolean;
@@ -50,6 +55,8 @@ export type ActivityEntry = {
 };
 
 export type API = {
+  "set-egress": (profiles: EgressProfiles) => Promise<Result<EgressSummary>>;
+  "get-egress": () => Promise<Result<EgressSummary>>;
   getSettings: () => Result<Settings>;
   updateSettings: (settings: Settings) => Promise<Result<Settings>>;
   getStatus: () => Result<TransportStatus>;

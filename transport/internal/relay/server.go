@@ -19,6 +19,7 @@ import (
 
 const maxConcurrentConnections = 128
 const maxActivityErrorBytes = 500
+const rejectionMessage = "Impersonate TLS routing is disabled or its transport is unavailable; direct fallback is disabled"
 
 type serverLimits struct {
 	headerTimeout time.Duration
@@ -38,6 +39,7 @@ type requestEvent struct {
 }
 
 type Server struct {
+	rejectOnly     bool
 	token          string
 	logger         *log.Logger
 	activityLogger *log.Logger
@@ -62,6 +64,14 @@ func NewServer(token string, logger *log.Logger, activityLoggers ...*log.Logger)
 		server.activityLogger = activityLoggers[0]
 	}
 	return server
+}
+
+// SetEgressFile is configured before Serve; updates are atomic file replacements.
+func (server *Server) SetEgressFile(file string) { server.clients.egress.file = file }
+
+func (server *Server) SetRejectOnly() {
+	server.rejectOnly = true
+	server.limits.headerTimeout = 5 * time.Second
 }
 
 func (server *Server) Serve(ctx context.Context, listener net.Listener) error {
@@ -106,6 +116,10 @@ func (server *Server) Serve(ctx context.Context, listener net.Listener) error {
 func (server *Server) rejectCapacity(connection net.Conn) {
 	defer connection.Close()
 	_ = connection.SetDeadline(time.Now().Add(time.Second))
+	if server.rejectOnly {
+		writeError(connection, http.StatusServiceUnavailable, rejectionMessage)
+		return
+	}
 	request, err := readIncomingHead(bufio.NewReaderSize(connection, 64*1024))
 	if err != nil {
 		writeError(connection, http.StatusBadRequest, "invalid request during transport overload")
@@ -139,6 +153,10 @@ func (server *Server) handleContext(parent context.Context, connection net.Conn)
 	request, err := readIncomingHead(reader)
 	if err != nil {
 		writeError(connection, http.StatusBadRequest, err.Error())
+		return
+	}
+	if server.rejectOnly {
+		writeError(connection, http.StatusServiceUnavailable, rejectionMessage)
 		return
 	}
 
@@ -213,6 +231,12 @@ func (server *Server) handleContext(parent context.Context, connection net.Conn)
 	response, err := forwardContext(requestContext, server.clients, request, metadata)
 	if err != nil {
 		status := http.StatusBadGateway
+		if errors.Is(err, errUnknownEgress) || errors.Is(err, errInvalidEgress) {
+			status = http.StatusBadRequest
+		}
+		if errors.Is(err, errEgressConfig) {
+			status = http.StatusServiceUnavailable
+		}
 		if errors.Is(err, errClientCapacity) {
 			status = http.StatusServiceUnavailable
 		}

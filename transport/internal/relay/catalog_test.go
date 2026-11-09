@@ -54,8 +54,8 @@ func TestEveryAdvertisedProfileCanUseVerifiedTLS(t *testing.T) {
 	roots.AddCert(origin.Certificate())
 	pool := newClientPool()
 	defer pool.close()
-	pool.create = func(name string, websocket bool) (tls_client.HttpClient, error) {
-		return newProfileClient(name, websocket, roots)
+	pool.create = func(name string, websocket bool, proxy string) (tls_client.HttpClient, error) {
+		return newProfileClient(name, websocket, roots, proxy)
 	}
 	target, _ := url.Parse(origin.URL)
 	host, port, _ := net.SplitHostPort(target.Host)

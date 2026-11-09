@@ -16,6 +16,7 @@ import type { Result, TransportStatus } from "shared";
 
 import { PLUGIN_VERSION } from "../../shared/src/catalog";
 
+import { egressFilePath } from "./egress";
 import { SerialQueue } from "./serial";
 import type { BackendSDK } from "./types";
 
@@ -67,6 +68,7 @@ export class TransportService {
     private readonly sdk: BackendSDK,
     private readonly onRequestEvent: (event: TransportRequestEvent) => void,
     private readonly onExit: (reason: string) => void = () => {},
+    private readonly rejectOnly = false,
   ) {
     this.status = {
       state: "idle",
@@ -130,6 +132,9 @@ export class TransportService {
           runtimeFiles.tokenPath,
           "--owner-file",
           runtimeFiles.ownerPath,
+          "--egress-file",
+          egressFilePath(this.sdk),
+          ...(this.rejectOnly ? ["--reject-only"] : []),
         ],
         {
           stdio: ["ignore", "pipe", "pipe"],
@@ -532,7 +537,9 @@ export class TransportService {
 
   private setStatus(update: Partial<TransportStatus>): void {
     this.status = { ...this.status, ...update };
-    this.sdk.api.send("transport:status", this.getStatus());
+    if (!this.rejectOnly) {
+      this.sdk.api.send("transport:status", this.getStatus());
+    }
   }
 
   private fail(

@@ -46,7 +46,7 @@ tests/caido/restart.sh dist
 
 The shell script only orchestrates Docker; all test code runs inside containers. It starts digest-pinned Caido 0.59.0 with an owned persistent volume and a local diagnostic origin in an isolated network namespace. No ports are published. A temporary guest session installs the ZIP and configures test rules; generated public CAs verify both TLS connections. The containers and volume are removed on exit.
 
-The test verifies destination ClientHello, HTTP/2, Activity, filters, rank, excluded `localhost`, disabled rules, and disabled shaping across real Caido process restarts. It fails against the released v0.3.0 ZIP at the first restart. CI runs it against the newly built ZIP before uploading the package. Pass another artifact directory as the argument to test a candidate without replacing `dist/`.
+The test verifies destination ClientHello, HTTP/2, Activity, filters, rank, excluded `localhost`, disabled rules, and disabled shaping across real Caido process restarts. It also configures authenticated HTTP and SOCKS5 egress proxies, verifies remote DNS and distinct source addresses, and checks HTTP/WebSocket routing, persisted selectors, Replay, Automate, credentials redaction, and failures without direct fallback before and after a restart. The released v0.3.0 ZIP fails at the first restart. CI runs this against the newly built ZIP before uploading the package. Pass another artifact directory as the argument to test a candidate without replacing `dist/`.
 
 ## Read Activity through caido-client
 
