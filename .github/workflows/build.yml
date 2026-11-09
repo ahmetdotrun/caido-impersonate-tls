@@ -93,14 +93,15 @@ jobs:
         run: sha256sum --check plugin_package.zip.sha256
       - name: Upload release as draft
         run: |
-          if ! gh api "repos/$GH_REPO/releases/tags/$RELEASE_TAG" > release-state.json; then
+          # The CLI also finds drafts by pending tag; REST's by-tag endpoint does not.
+          if ! gh release view "$RELEASE_TAG" --json databaseId,isDraft > release-state.json; then
             gh release create "$RELEASE_TAG" --verify-tag --draft \
               --title "Impersonate TLS $RELEASE_TAG" \
               --notes-file "docs/releases/$RELEASE_TAG.md"
-            gh api "repos/$GH_REPO/releases/tags/$RELEASE_TAG" > release-state.json
+            gh release view "$RELEASE_TAG" --json databaseId,isDraft > release-state.json
           fi
-          test "$(jq -r .draft release-state.json)" = true
-          release_id=$(jq -r .id release-state.json)
+          test "$(jq -r .isDraft release-state.json)" = true
+          release_id=$(jq -r .databaseId release-state.json)
           for asset in plugin_package.zip plugin_package.zip.sha256; do
             asset_id=$(gh api "repos/$GH_REPO/releases/$release_id/assets" \
               --jq ".[] | select(.name == \"$asset\") | .id")
@@ -110,7 +111,7 @@ jobs:
           done
       - name: Verify uploaded assets and publish
         run: |
-          release_id=$(gh api "repos/$GH_REPO/releases/tags/$RELEASE_TAG" --jq .id)
+          release_id=$(gh release view "$RELEASE_TAG" --json databaseId --jq .databaseId)
           for asset in plugin_package.zip plugin_package.zip.sha256; do
             expected_digest="sha256:$(sha256sum "dist/$asset" | cut -d ' ' -f 1)"
             actual_digest=$(gh api "repos/$GH_REPO/releases/$release_id/assets" \
