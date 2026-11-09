@@ -157,7 +157,7 @@ func forwardContext(ctx context.Context, pool *clientPool, request *incomingRequ
 		}
 		return nil, errors.New("upstream request failed")
 	}
-	body := &leasedBody{ReadCloser: response.Body, release: release}
+	body := &leasedBody{ReadCloser: response.Body, release: release, redactErrors: egress.name != ""}
 	if duplex, ok := response.Body.(io.ReadWriteCloser); ok {
 		response.Body = &leasedDuplexBody{leasedBody: body, writer: duplex}
 	} else {
@@ -168,12 +168,25 @@ func forwardContext(ctx context.Context, pool *clientPool, request *incomingRequ
 
 type leasedBody struct {
 	io.ReadCloser
-	release func()
+	release      func()
+	redactErrors bool
+}
+
+func (body *leasedBody) safeError(err error) error {
+	if body.redactErrors && err != nil && err != io.EOF {
+		return errEgressRequest
+	}
+	return err
+}
+
+func (body *leasedBody) Read(buffer []byte) (int, error) {
+	n, err := body.ReadCloser.Read(buffer)
+	return n, body.safeError(err)
 }
 
 func (body *leasedBody) Close() error {
 	defer body.release()
-	return body.ReadCloser.Close()
+	return body.safeError(body.ReadCloser.Close())
 }
 
 type leasedDuplexBody struct {
@@ -182,7 +195,8 @@ type leasedDuplexBody struct {
 }
 
 func (body *leasedDuplexBody) Write(buffer []byte) (int, error) {
-	return body.writer.Write(buffer)
+	n, err := body.writer.Write(buffer)
+	return n, body.safeError(err)
 }
 
 func (request *incomingRequest) connectionHeaderNames() map[string]struct{} {

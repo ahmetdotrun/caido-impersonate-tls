@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -24,6 +25,40 @@ import (
 
 	tls_client "github.com/bogdanfinn/tls-client"
 )
+
+type failingEgressStream struct{ err error }
+
+func (stream failingEgressStream) Read([]byte) (int, error)  { return 0, stream.err }
+func (stream failingEgressStream) Write([]byte) (int, error) { return 0, stream.err }
+func (stream failingEgressStream) Close() error              { return stream.err }
+
+func TestEgressRedactsLateHTTPAndWebSocketErrors(t *testing.T) {
+	reflected := errors.New("peer reflected http://private-user:private-password@proxy.invalid")
+	for _, proxied := range []bool{false, true} {
+		for _, upstreamError := range []error{reflected, io.EOF, nil} {
+			stream := failingEgressStream{err: upstreamError}
+			releases := 0
+			body := &leasedDuplexBody{leasedBody: &leasedBody{
+				ReadCloser: stream, redactErrors: proxied, release: func() { releases++ },
+			}, writer: stream}
+			_, readError := body.Read(make([]byte, 1))
+			_, writeError := body.Write([]byte("payload"))
+			closeError := body.Close()
+			want := upstreamError
+			if proxied && upstreamError == reflected {
+				want = errEgressRequest
+			}
+			for _, err := range []error{readError, writeError, closeError} {
+				if err != want {
+					t.Fatalf("proxied=%v: stream error was not handled safely", proxied)
+				}
+			}
+			if releases != 1 {
+				t.Fatal("error redaction lost the client lease release")
+			}
+		}
+	}
+}
 
 func saveEgressTest(t *testing.T, file string, profiles map[string]egressProfile) {
 	t.Helper()
