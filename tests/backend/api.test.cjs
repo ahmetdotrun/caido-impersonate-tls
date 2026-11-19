@@ -17,6 +17,16 @@ test("settings API reports startup failure after persisting settings and can rep
   sdk.meta.assetsPath = () => directory;
   await writeFile(path.join(directory, "settings.json"), "{broken");
   await init(sdk);
+  const profiles = handlers.getProfiles(sdk).value;
+  for (const id of ["chrome_157_cft", "chrome_157_cft_PSK"]) {
+    const profile = profiles.find((profile) => profile.id === id);
+    assert.equal(profile.http2Headers.priorityByDestination.document, "u=0, i");
+    assert.equal(profile.http2Headers.order.at(-1), "priority");
+  }
+  assert.deepEqual(
+    profiles.find((profile) => profile.id === "firefox_148").http2Headers,
+    {},
+  );
   assert.equal((await handlers.updateSettings(sdk, null)).kind, "Error");
   assert.equal(handlers.getSettings(sdk).kind, "Error");
   assert.equal(handlers.getStatus(sdk).value.state, "idle");

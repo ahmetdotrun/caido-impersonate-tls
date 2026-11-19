@@ -26,9 +26,32 @@ HTTP and WebSocket clients have separate TLS session caches. Resumption across t
 
 ## Headers and identity warnings
 
-The plugin preserves supplied headers. It does not rewrite the User-Agent or generate Client Hints to match a profile.
+The plugin preserves supplied header values. It does not rewrite the User-Agent or generate Client Hints to match a profile.
 
 When those headers are present, Activity can warn about disagreements in browser family, version, platform, Chromium Client Hints, or mobile identity. Missing headers or a lack of warnings do not prove a match.
+
+## HTTP/2 request headers
+
+Available in v0.5.0 and later.
+
+Each catalog profile selects an HTTP/2 header policy alongside its TLS and HTTP/2 settings. The policy lives in `http2HeaderProfiles` in [catalog.json](../transport/internal/relay/catalog.json); `getProfiles` returns its resolved data in `http2Headers`. Both Chrome 157 profiles select the measured `chrome_157` policy. Other profiles select `preserve` until their header behavior is measured.
+
+Chrome 157 has separate navigation and subresource header orders. Known browser headers follow the selected order, with `priority` last; other headers follow in their supplied relative order. Values and duplicate-value order are preserved. This runs only after the target connection negotiates HTTP/2, including reused connections. HTTP/1.1 and WebSocket Upgrade requests retain their supplied order.
+
+When no `Priority` field is supplied, Chrome 157 derives it from `Sec-Fetch-Dest`:
+
+| Destination | Priority |
+| --- | --- |
+| `document`, `iframe`, `frame` | `u=0, i` |
+| `style`, `font` | `u=0` |
+| `script` | `u=1` |
+| `empty` (fetch/XHR) | `u=1, i` |
+| `image`, `audio`, `video`, `track` | `i` |
+| `empty` with `Sec-Fetch-Mode: no-cors` (beacon hint) | `u=4, i` |
+
+The beacon hint also covers no-cors fetches; supply `Priority` explicitly when a different value is needed. Any supplied `Priority`, including an empty value, is retained. Missing, unknown, or duplicate destination metadata does not cause an invented priority value. The plugin does not infer page layout, `fetchpriority`, or resource scheduling beyond these rules.
+
+The pinned Chrome comparison covers navigation, GET/POST fetch, and form POST captures, including an HTTP/1.1 input with `Priority` removed and the remaining headers reordered. Transport tests decode real HTTP/2 header frames for the full destination table, explicit values, profile isolation, proxy routes, and concurrent streams.
 
 ## Observed Caido behavior
 
@@ -50,7 +73,7 @@ Caido **0.59.0** logged a thrown upstream-hook exception and then sent the reque
 
 In isolated Caido **0.59.0** checks, Chrome 157 negotiated HTTP/1.1 with Caido using both network stacks. Its requests omitted the `Priority` header sent on direct HTTP/2 navigation. The destination TLS and HTTP/2 settings and remaining ordered headers matched the direct capture.
 
-Supplying the captured headers through Caido CONNECT preserved `Priority` and the complete header order. The relay cannot reconstruct a header the browser did not send. These results do not establish full browser parity through Caido.
+The Chrome 157 header policy now reconstructs missing `Priority` and applies its HTTP/2 order at the transport. Supplied priorities are retained. This addresses that specific HTTP/1.1-to-HTTP/2 gap; it does not establish full browser parity through Caido.
 
 ### Streaming and cancellation
 

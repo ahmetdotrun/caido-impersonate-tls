@@ -17,12 +17,14 @@ type profileInfo struct {
 	Source         string   `json:"source"`
 	VerifiedBuilds []string `json:"verifiedBuilds,omitempty"`
 	Verification   string   `json:"verification,omitempty"`
+	HTTP2Headers   string   `json:"http2Headers"`
 }
 
 type profileCatalog struct {
-	Version          string        `json:"version"`
-	TLSClientVersion string        `json:"tlsClientVersion"`
-	Profiles         []profileInfo `json:"profiles"`
+	Version             string                        `json:"version"`
+	TLSClientVersion    string                        `json:"tlsClientVersion"`
+	Profiles            []profileInfo                 `json:"profiles"`
+	HTTP2HeaderProfiles map[string]http2HeaderProfile `json:"http2HeaderProfiles"`
 }
 
 var catalog = func() profileCatalog {

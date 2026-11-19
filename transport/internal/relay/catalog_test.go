@@ -22,6 +22,9 @@ func TestCatalogCoversEveryPinnedProfile(t *testing.T) {
 			t.Fatalf("invalid or duplicate profile: %+v", item)
 		}
 		seen[item.ID] = true
+		if _, exists := catalog.HTTP2HeaderProfiles[item.HTTP2Headers]; !exists {
+			t.Fatalf("profile %s references an unavailable HTTP/2 header profile %q", item.ID, item.HTTP2Headers)
+		}
 		switch item.Family {
 		case "chromium", "firefox", "safari", "okhttp", "application":
 		default:

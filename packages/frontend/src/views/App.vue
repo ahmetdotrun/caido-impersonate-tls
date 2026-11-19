@@ -425,8 +425,8 @@ onMounted(() => void load());
                       Upstream tls-client {{ TLS_CLIENT_VERSION }} snapshot.
                       Parity with your browser build has not been verified here.
                     </template>
-                    Headers are preserved; keep User-Agent and Client Hints
-                    aligned with this profile.
+                    Header values are preserved; keep User-Agent and Client
+                    Hints aligned with this profile.
                   </Message>
 
                   <Divider />

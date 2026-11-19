@@ -142,7 +142,7 @@ func forwardContext(ctx context.Context, pool *clientPool, request *incomingRequ
 		return nil, err
 	}
 
-	response, err := client.Do(upstream)
+	response, err := client.Do(withProfileHTTP2Headers(upstream, metadata.Profile))
 	if err != nil {
 		release()
 		if errors.Is(err, errBodyTooLarge) {

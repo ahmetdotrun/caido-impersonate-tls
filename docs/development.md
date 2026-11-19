@@ -29,7 +29,7 @@ docker run --rm --network none --shm-size=1g --cap-drop ALL --security-opt no-ne
 
 The image downloads SHA-256-pinned official agent-browser and Chrome for Testing binaries. At runtime it uses a generated local CA and a loopback diagnostic origin, with certificate verification enabled and no external network access.
 
-It runs three comparisons for `chrome_157_cft` and five for `chrome_157_cft_PSK`: fresh/reused HTTP/2, accepted TLS resumption for the PSK variant, and a separate cold WebSocket origin. The [compatibility guide](compatibility.md) lists the measured fields and scope.
+It compares both `chrome_157_cft` and `chrome_157_cft_PSK`: fresh/reused HTTP/2, accepted TLS resumption for the PSK variant, GET/POST fetches, form POSTs, and a separate cold WebSocket origin. HTTP/2 captures are also sent through an HTTP/1.1 input with `Priority` removed and browser headers scrambled, checking that the selected profile reconstructs the original header values and order. The [compatibility guide](compatibility.md) lists the measured fields and scope.
 
 This fixture checks the relay directly. It does not configure or certify a Caido instance. The [GitHub Actions workflow](../.github/workflows/build.yml) runs packaging and browser comparisons as separate jobs.
 
@@ -46,7 +46,7 @@ tests/caido/restart.sh dist
 
 The shell script only orchestrates Docker; all test code runs inside containers. It starts digest-pinned Caido 0.59.0 with an owned persistent volume and a local diagnostic origin in an isolated network namespace. No ports are published. A temporary guest session installs the ZIP and configures test rules; generated public CAs verify both TLS connections. The containers and volume are removed on exit.
 
-The test verifies destination ClientHello, HTTP/2, Activity, filters, rank, excluded `localhost`, disabled rules, and disabled shaping across real Caido process restarts. It also configures authenticated HTTP and SOCKS5 egress proxies, verifies remote DNS and distinct source addresses, and checks HTTP/WebSocket routing, persisted selectors, Replay, Automate, credentials redaction, and failures without direct fallback before and after a restart. The released v0.3.0 ZIP fails at the first restart. CI runs this against the newly built ZIP before uploading the package. Pass another artifact directory as the argument to test a candidate without replacing `dist/`.
+The test verifies destination ClientHello, HTTP/2 and reconstructed `Priority`, Activity, filters, rank, excluded `localhost`, disabled rules, and disabled shaping across real Caido process restarts. It also configures authenticated HTTP and SOCKS5 egress proxies, verifies remote DNS and distinct source addresses, and checks HTTP/WebSocket routing, persisted selectors, Replay, Automate, credentials redaction, and failures without direct fallback before and after a restart. The released v0.3.0 ZIP fails at the first restart. CI runs this against the newly built ZIP before uploading the package. Pass another artifact directory as the argument to test a candidate without replacing `dist/`.
 
 ## Read Activity through caido-client
 

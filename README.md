@@ -31,6 +31,7 @@ Caido Proxy / Replay / Automate / Workflows
 
 - **86 profiles** covering Chrome, Brave, Firefox, Safari, Opera, OkHttp, and application snapshots.
 - HTTPS with HTTP/2 or HTTP/1.1, plain HTTP, and WebSockets.
+- [HTTP/2 header profiles](docs/compatibility.md#http2-request-headers), with Chrome 157 ordering and missing `Priority` reconstruction.
 - [Named egress profiles](docs/egress.md) for authenticated HTTP/SOCKS5 proxies, with isolated connections and TLS sessions.
 - Activity showing the selected profile, response status, protocol, duration, and identity warnings.
 - A bundled transport that starts automatically, verifies target certificates, and blocks matching requests if it becomes unavailable.
@@ -39,7 +40,7 @@ New installations default to **Chrome for Testing 157 (Linux, PSK)**. Existing s
 
 ## Limitations
 
-- Request headers stay as supplied. Match the profile to your browser, User-Agent, and Client Hints.
+- User-Agent and Client Hints stay as supplied. Match them to your selected profile.
 - Caido can affect headers, streaming, and cancellation. A selected profile alone does not establish an exact browser match.
 - HTTP/3 and custom ClientHello or JA3/JA4 imports are not supported.
 

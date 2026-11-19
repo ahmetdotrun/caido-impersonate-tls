@@ -35,7 +35,7 @@ Settings reads/writes and start/stop operations execute in order. Settings files
 ## Protocol behavior
 
 - HTTPS negotiates HTTP/2 or HTTP/1.1 through ALPN; plain HTTP uses HTTP/1.1.
-- Request headers and response content encodings are preserved where possible.
+- Request header values and response content encodings are preserved where possible. HTTP/2 header order and missing protocol-specific fields follow the selected [profile policy](compatibility.md#http2-request-headers).
 - RFC 6455 WebSockets use the selected TLS profile with an HTTP/1.1 Upgrade handshake and a bidirectional tunnel.
 - Informational responses, including `100 Continue` and `103 Early Hints`, are forwarded. `OPTIONS *` keeps its server-wide target.
 - Chrome 110+ and Brave profiles randomize ClientHello extension order for each new handshake. Older snapshots retain their captured order. HTTP/1.1 Upgrade clients omit HTTP/2 application settings.

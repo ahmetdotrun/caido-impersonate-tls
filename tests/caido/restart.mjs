@@ -188,7 +188,16 @@ async function capture(host) {
   try {
     return await new Promise((resolve, reject) => {
       const request = http.request(
-        { host, port, path: "/capture", agent },
+        {
+          host,
+          port,
+          path: "/capture",
+          agent,
+          headers: {
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+          },
+        },
         (response) => {
           const chunks = [];
           response.on("error", reject);
@@ -228,6 +237,13 @@ async function assertCapture(host, shaped) {
   const ciphers = observation.tls.ciphers;
   assert.equal(ciphers.length, shaped ? 16 : 31);
   assert.equal(ciphers.some(grease), shaped);
+  assert.deepEqual(
+    observation.headers
+      .filter(([name]) => name.toLowerCase() === "priority")
+      .map(([, value]) => value),
+    shaped ? ["u=0, i"] : [],
+    "HTTP/1.1 input must acquire Priority only on the shaped HTTP/2 origin leg",
+  );
   if (shaped) {
     assert.equal(observation.protocol, "h2");
     for (const extension of [27, 4832, 51764]) {

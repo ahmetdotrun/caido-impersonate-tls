@@ -112,15 +112,27 @@ function normalize(observation) {
   };
 }
 
-async function throughRelay(port, originPort, baseline) {
+async function throughRelay(
+  port,
+  originPort,
+  baseline,
+  reconstruct = false,
+  body,
+) {
   const authority = baseline.headers.find(
     ([name]) => name === ":authority" || name.toLowerCase() === "host",
   )[1];
   const destination = new URL(`https://${authority}`);
   const headers = ["Host", authority];
-  for (const [name, value] of baseline.headers)
-    if (!name.startsWith(":") && name.toLowerCase() !== "host")
-      headers.push(name, value);
+  let regular = baseline.headers.filter(
+    ([name]) => !name.startsWith(":") && name.toLowerCase() !== "host",
+  );
+  if (reconstruct) {
+    // Simulate the H1 gap and scramble supplied browser headers to exercise the
+    // selected profile's order, rather than passing through an H2 capture.
+    regular = regular.filter(([name]) => name !== "priority").reverse();
+  }
+  for (const [name, value] of regular) headers.push(name, value);
   for (const [name, value] of Object.entries({
     Token: token,
     Scheme: "https",
@@ -136,7 +148,8 @@ async function throughRelay(port, originPort, baseline) {
       {
         host: "127.0.0.1",
         port,
-        method: "GET",
+        method:
+          baseline.headers.find(([name]) => name === ":method")?.[1] ?? "GET",
         path: baseline.path,
         headers,
         agent: false,
@@ -190,7 +203,7 @@ async function throughRelay(port, originPort, baseline) {
     req.setTimeout(10_000, () =>
       req.destroy(new Error("relay request timed out")),
     );
-    req.end();
+    req.end(body);
   });
 }
 
@@ -236,6 +249,10 @@ try {
       .result;
     const shaped = await throughRelay(relay.port, origin.port, baseline);
     observations.push({ baseline, shaped });
+    observations.push({
+      baseline,
+      shaped: await throughRelay(relay.port, origin.port, baseline, true),
+    });
   }
   if (profile.endsWith("_PSK")) {
     for (let i = 0; i < 2; i++) {
@@ -247,6 +264,21 @@ try {
         baseline,
         shaped: await throughRelay(relay.port, origin.port, baseline),
       });
+      // /fresh-* closes its connection. Make a matching second browser request
+      // so reconstruction is compared with the same resumed TLS state.
+      await cli("open", `https://localhost:${origin.port}/fresh-gap-${i}`);
+      const reconstructedBaseline = (
+        await cli("eval", "JSON.parse(document.body.innerText)")
+      ).result;
+      observations.push({
+        baseline: reconstructedBaseline,
+        shaped: await throughRelay(
+          relay.port,
+          origin.port,
+          reconstructedBaseline,
+          true,
+        ),
+      });
     }
     assert(
       observations.at(-1).baseline.resumed,
@@ -257,6 +289,51 @@ try {
       "Relay did not resume the TLS session",
     );
   }
+  for (const method of ["GET", "POST"]) {
+    const body = method === "POST" ? "payload" : undefined;
+    const fetched = await cli(
+      "eval",
+      `fetch('/fetch-${method}', ${JSON.stringify({ method, body })}).then(r=>r.json())`,
+    );
+    observations.push({
+      baseline: fetched.result,
+      shaped: await throughRelay(
+        relay.port,
+        origin.port,
+        fetched.result,
+        true,
+        body,
+      ),
+    });
+  }
+  await cli(
+    "eval",
+    `(() => {
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = '/form-capture';
+      const input = document.createElement('input');
+      input.name = 'field';
+      input.value = 'payload';
+      form.append(input);
+      document.body.append(form);
+      form.submit();
+      return true;
+    })()`,
+  );
+  await cli("wait", "--url", "**/form-capture");
+  const submitted = (await cli("eval", "JSON.parse(document.body.innerText)"))
+    .result;
+  observations.push({
+    baseline: submitted,
+    shaped: await throughRelay(
+      relay.port,
+      origin.port,
+      submitted,
+      true,
+      "field=payload",
+    ),
+  });
   // Use a separate origin identity for the cold WebSocket check. HTTP/WS
   // clients have separate session caches; cross-mode resumption is unverified.
   const socketURL = `wss://127.0.0.1:${origin.port}/socket`;

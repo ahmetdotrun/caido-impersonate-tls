@@ -127,7 +127,7 @@ func TestForwardPreservesGeneratedHeaderPositions(t *testing.T) {
 		Scheme:  "http",
 		Host:    host,
 		Port:    port,
-		Profile: "chrome_146",
+		Profile: "chrome_157_cft_PSK",
 	}
 
 	response, err := forward(newClientPool(), request, metadata)
