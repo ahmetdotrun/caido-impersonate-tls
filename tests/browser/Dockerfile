@@ -3,9 +3,10 @@ FROM golang@sha256:e401dae1bf814e29204a8cb7915682e1780951e609ca0dd8865ee1937f510
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local
 WORKDIR /src/transport
 COPY transport/go.mod transport/go.sum ./
-RUN --mount=type=cache,target=/go/pkg/mod go mod download && go mod verify
+# Keep modules in the layer: cache mounts can be evicted independently.
+RUN go mod download && go mod verify
 COPY transport/ ./
-RUN --network=none --mount=type=cache,target=/go/pkg/mod \
+RUN --network=none \
     go build -o /out/caido-impersonate-transport ./cmd/transport && \
     go build -o /out/fingerprint ./cmd/fingerprint
 

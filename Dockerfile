@@ -8,22 +8,22 @@ ENV PATH="/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin" \
 WORKDIR /src/transport
 
 COPY transport/go.mod transport/go.sum ./
-RUN --mount=type=cache,target=/go/pkg/mod \
-    go mod download && go mod verify
+# Keep modules in the layer: cache mounts can be evicted independently.
+RUN go mod download && go mod verify
 
 FROM transport-deps AS transport-build
 
 COPY LICENSE /src/LICENSE
 COPY transport/ ./
-RUN --network=none --mount=type=cache,target=/go/pkg/mod \
+RUN --network=none \
     go test ./...
-RUN --network=none --mount=type=cache,target=/go/pkg/mod \
+RUN --network=none \
     GOOS=linux GOARCH=amd64 go build \
       -trimpath \
       -ldflags="-s -w -buildid=" \
       -o /out/linux-amd64/caido-impersonate-transport \
       ./cmd/transport
-RUN --network=none --mount=type=cache,target=/go/pkg/mod set -eu; \
+RUN --network=none set -eu; \
     mkdir -p /out/licenses; \
     cp /src/LICENSE /out/licenses/PROJECT_LICENSE.txt; \
     cp /usr/local/go/LICENSE /out/licenses/GO_LICENSE.txt; \
@@ -78,7 +78,7 @@ RUN --network=none set -eu; \
 
 FROM transport-build AS transport-race
 
-RUN --network=none --mount=type=cache,target=/go/pkg/mod \
+RUN --network=none \
     CGO_ENABLED=1 go test -race ./...
 
 FROM node@sha256:752ea8a2f758c34002a0461bd9f1cee4f9a3c36d48494586f60ffce1fc708e0e AS plugin-deps
